@@ -1,7 +1,8 @@
+"use strict";
 // get jwks 
-
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.PUBLIC_KEY = exports.PRIVATE_KEY = exports.JWKS = void 0;
 // TODO -- figure out where these are stored and retrieve them
-
 const JWKS = {
     keys: [
         {
@@ -13,10 +14,9 @@ const JWKS = {
             n: "i2c14MlAJTe25aqFt4voMRDIbTLMTslH7U36cpq3lJPDwRhe-hgXLayhrx_j0lbnieM4B9BeKO8gG6_z4YHBxo9TNvoM2qC1kXvYlpsgZU3e94kOVQ_qyKggclr3mEQHLhxpsXMBY3BThlpNDJv2PCZTx8s6DjJn5-2KQHtaBcj6NpsBh7NQEEdE1dYkhG7Jo0yRhik5GPeU6kvahdlPFlQshepW_Zz66lSs17t0TqL0pP3lJwmdb0LTVcfi7i6e_Q91tdcwFtGr4HU9PqSsjCXHn4zn1S22z6p77L0h63yE1QphSWNjt2mfwQjtkq54L2NeeBMAVf29HfRmOsI_nw"
         }
     ]
-}
-
-const PRIVATE_KEY = 
-`"-----BEGIN PRIVATE KEY-----
+};
+exports.JWKS = JWKS;
+const PRIVATE_KEY = `"-----BEGIN PRIVATE KEY-----
 MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCLZzXgyUAlN7bl
 qoW3i+gxEMhtMsxOyUftTfpymreUk8PBGF76GBctrKGvH+PSVueJ4zgH0F4o7yAb
 r/PhgcHGj1M2+gzaoLWRe9iWmyBlTd73iQ5VD+rIqCByWveYRAcuHGmxcwFjcFOG
@@ -44,9 +44,9 @@ MhxbjR3hNw51vDZeoPa4gbCDFsm4iLDxNHZ9rYX183JMgL18o2Lf1orHGcG8vIS6
 6PmAumWiXkbCuih5k1YCkaVqOSUXwr44iDr7UXAQF/Q4bOoSQLN+X7U8rlkCsCu0
 +ZwglAbQglCWpVd75rM3FiA=
 -----END PRIVATE KEY-----
-"`
-const PUBLIC_KEY =
-`-----BEGIN PUBLIC KEY-----
+"`;
+exports.PRIVATE_KEY = PRIVATE_KEY;
+const PUBLIC_KEY = `-----BEGIN PUBLIC KEY-----
 MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAi2c14MlAJTe25aqFt4vo
 MRDIbTLMTslH7U36cpq3lJPDwRhe+hgXLayhrx/j0lbnieM4B9BeKO8gG6/z4YHB
 xo9TNvoM2qC1kXvYlpsgZU3e94kOVQ/qyKggclr3mEQHLhxpsXMBY3BThlpNDJv2
@@ -54,6 +54,5 @@ PCZTx8s6DjJn5+2KQHtaBcj6NpsBh7NQEEdE1dYkhG7Jo0yRhik5GPeU6kvahdlP
 FlQshepW/Zz66lSs17t0TqL0pP3lJwmdb0LTVcfi7i6e/Q91tdcwFtGr4HU9PqSs
 jCXHn4zn1S22z6p77L0h63yE1QphSWNjt2mfwQjtkq54L2NeeBMAVf29HfRmOsI/
 nwIDAQAB
------END PUBLIC KEY-----`
-
-export { JWKS, PRIVATE_KEY, PUBLIC_KEY}
+-----END PUBLIC KEY-----`;
+exports.PUBLIC_KEY = PUBLIC_KEY;

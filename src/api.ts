@@ -1,15 +1,23 @@
 // server
 
-import fastify from 'fastify';
-import jws from 'jws'
-import jwkToPem from 'jwk-to-pem'
+import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import formbody from '@fastify/formbody';
+import jws, { Algorithm, Header } from 'jws'
+import jwkToPem, { JWK } from 'jwk-to-pem'
 import { jwkThumbprintByEncoding } from 'jwk-thumbprint';
 import { randomUUID } from 'crypto';
+import { serialize as serializeCookie, parse as parseCookies } from 'cookie'
 
 import { JWKS, PRIVATE_KEY, PUBLIC_KEY } from './jwks'
 import * as state from './state'
 
-const BASE_URL = 'http://localhost:3000'
+const HOST = process.env.HOST
+const PORT: number = Number(process.env.PORT) || 3000
+
+const BASE_URL = (HOST)
+    ? `https://${HOST}`
+    : `http://localhost:${PORT}`
+
 const TOKEN_ENDPOINT = '/token'
 const REVOCATION_ENDPOINT = '/revoke'
 const JWKS_ENDPOINT = '/jwks'
@@ -17,18 +25,42 @@ const LOGIN_ENDPOINT = '/login'
 
 const HTU = BASE_URL + TOKEN_ENDPOINT
 
-const PORT = 8080
-
 const ACCESS_LIFETIME = 5 * 60              // 5 minutes
 const STATE_LIFETIME = 5 * 60               // 5 minutes
 const REFRESH_LIFETIME = 30 * 24 * 60 * 60  // 30 days
 const DPOP_LIFETIME = 60                    // 1 minute for clock skew
 
-const JWT_HEADER = {
-    alg: JWKS.keys[0].alg,
-    typ: 'JWT',
+const PRODUCTION = (process.env.NODE_ENV === 'production')
+
+const JWT_HEADER: Header = {
+    alg: 'RS256',
+    typ: 'jwt',
     kid: JWKS.keys[0].kid
 }
+const AT_HEADER: Header = {
+    alg: 'RS256',
+    typ: 'at+jwt',
+    kid: JWKS.keys[0].kid
+}
+
+// OAuth 2.0 Authorization Server Metadata
+const META_DATA = {
+    issuer: BASE_URL,
+    token_endpoint: `${BASE_URL}${TOKEN_ENDPOINT}`,
+    jwks_uri: `${BASE_URL}${JWKS_ENDPOINT}`,
+    grant_types_supported: [
+        'authorization_code', 
+        'client_credentials', 
+        'refresh_token',
+        'cookie_token', // non-standard
+    ],
+    revocation_endpoint: `${BASE_URL}${REVOCATION_ENDPOINT}`,
+    dpop_signing_alg_values_supported: [
+        'RS256','ES256'
+    ],    
+}
+
+// console.log('/.well-known/oauth-authorization-server', JSON.stringify(META_DATA, null, 2))
 
 class TokenError extends Error {
     statusCode: number; 
@@ -41,16 +73,60 @@ class TokenError extends Error {
     }
 }
 
-const validateDPoP = (req): string => {
+const setTokenCookies = (reply: FastifyReply, access_token: string, refresh_token: string) => {
+
+    const accessTokenCookie = serializeCookie('access_token', access_token || '', {
+        maxAge: access_token ? ACCESS_LIFETIME : 0,
+        httpOnly: true,
+        path: '/',
+        secure: PRODUCTION,
+        sameSite: 'strict',
+    })
+
+    const refreshTokenCookie = serializeCookie('refresh_token', refresh_token || '', {
+        maxAge: refresh_token ? REFRESH_LIFETIME : 0,
+        httpOnly: true,
+        path: TOKEN_ENDPOINT,
+        secure: PRODUCTION,
+        sameSite: 'strict',
+    })
+
+    reply.header('Set-Cookie', [accessTokenCookie, refreshTokenCookie]);
+}
+
+const setSessionCookie = (reply: FastifyReply, session_token: string) => {
+
+    const sessionTokenCookie = serializeCookie('session_token', session_token || '', {
+        maxAge: session_token ? STATE_LIFETIME : 0,
+        httpOnly: true,
+        path: TOKEN_ENDPOINT,
+        secure: PRODUCTION,
+        sameSite: 'strict',
+    })
+    reply.header('Set-Cookie', sessionTokenCookie);
+}
+
+const getCookies = (req: FastifyRequest): Record<string, string> => {
+    const cookies = req.headers['cookie']
+    if (!cookies) {
+        return {}
+    }
+    return parseCookies(cookies)
+}
+
+const validateDPoP = (req: FastifyRequest): string => {
     const dpop = req.headers['DPoP']
     if (!dpop) {
         throw new TokenError(400, 'DPoP header is required')
     }
-    const { header, payload } = jws.decode(dpop)
+    if (Array.isArray(dpop)) {
+        throw new TokenError(400, 'Only one DPoP header is allowed')
+    }
+    const { header, payload } = jws.decode(dpop as string)
     if (!header || !payload) {
         throw new TokenError(400, 'DPoP header is invalid')
     }
-    const { typ, alg, jwk } = header
+    const { typ, alg, jwk } = header as { typ: string, alg: Algorithm, jwk: JWK}
     if (typ !== 'dpop+jwt') {
         throw new TokenError(400, 'DPoP typ is invalid')
     }
@@ -84,19 +160,44 @@ const validateDPoP = (req): string => {
     return jkt
 }   
 
-const refreshFromCode = (code: string, jwt?: string): string => {
-    // lookup code and get payload 
+const refreshFromCode = async (code: string, client_id: string, jkt: string): Promise<string> => {
+    const currentState = await state.read(code)
+    if (!currentState) {
+        throw new TokenError(400, 'code is invalid')
+    }
+    if (!currentState.loggedIn) {
+        throw new TokenError(400, 'code is not logged in')
+    }
+    if (currentState.iss !== BASE_URL) {
+        throw new TokenError(400, 'code invalid issuer')
+    }
+    const now = Math.floor(Date.now() / 1000)
+    if (currentState.exp < now) {
+        throw new TokenError(400, 'code is expired')
+    }
+    // check one time use of code
+    if (currentState.code_used) {
+        // future - logout user to revoke issued refresh_token
+        throw new TokenError(400, 'code has already been used')
+    }
+    currentState.code_used = now 
+    await state.update(code, currentState)
 
     const payload = {
-    } as any
-
-    if (jwt) {
-        payload.cnf = {
-            jkt: jwt
+        iss: BASE_URL,
+        sub: currentState.sub,
+        aud: currentState.aud,
+        client_id,
+        token_type: 'refresh_token',
+        iat: now,
+        exp: now + REFRESH_LIFETIME,
+        jti: randomUUID(),
+        cnf: {
+            jkt: jkt
         }
     }
+
     payload.token_type = 'refresh_token'
-    const now = Math.floor(Date.now() / 1000)
     payload.iat = now
     payload.exp = now + REFRESH_LIFETIME
     const refresh_token = jws.sign({
@@ -107,7 +208,7 @@ const refreshFromCode = (code: string, jwt?: string): string => {
     return refresh_token
 }
 
-const refreshFromRefresh = (refresh_token: string, jwt?: string): string => {
+const refreshFromRefresh = (refresh_token: string): string => {
     const { header, payload } = jws.decode(refresh_token)
     if (!header || !payload) {
         throw new TokenError(400, 'refresh_token is invalid')
@@ -162,10 +263,12 @@ const refreshFromSession = async (session_token: string) => {
     const refreshPayload = {
         iss: BASE_URL,
         sub: currentState.sub,
+        aud: currentState.aud,
         client_id: payload.client_id,
         token_type: 'refresh_token',
         iat: now,
-        exp: now + REFRESH_LIFETIME
+        exp: now + REFRESH_LIFETIME,
+        jti: randomUUID()
     }
     const newRefreshToken = jws.sign({
         header: JWT_HEADER,
@@ -180,29 +283,33 @@ const accessFromRefresh = (refresh_token: string): string => {
     if (!header || !payload) {
         throw new TokenError(400, 'refresh_token is invalid')
     }
-    try {
-        const decoded = jws.verify(refresh_token, header.alg, PUBLIC_KEY)
-    } catch (e) {
-        throw new 
-        TokenError(400, 'refresh_token is invalid')
+    if (payload.token_type !== 'refresh_token') {
+        throw new TokenError(400, 'refresh_token is invalid')
     }
     const now = Math.floor(Date.now() / 1000)
     // check if expired 
     if (payload.exp < now) {
         throw new TokenError(400, 'refresh_token is expired')
     }
-    delete payload.token_type
+    try {
+        const decoded = jws.verify(refresh_token, header.alg, PUBLIC_KEY)
+    } catch (e) {
+        throw new 
+        TokenError(400, 'refresh_token is invalid')
+    }
+    payload.token_type = 'access_token'
     payload.iat = now
     payload.exp = now + ACCESS_LIFETIME
+    payload.jwi = randomUUID()
     const newAccessToken = jws.sign({
-        header: JWT_HEADER,
+        header: AT_HEADER,
         payload,
         privateKey: PRIVATE_KEY
     })
     return newAccessToken
 }
 
-const makeSessionToken = async (client_id): Promise<{session_token: string, nonce: string}> => {
+const makeSessionToken = async (client_id: string): Promise<{session_token: string, nonce: string}> => {
     const nonce = randomUUID()
     const now = Math.floor(Date.now() / 1000)
     const currentState: state.State = {
@@ -227,21 +334,22 @@ const makeSessionToken = async (client_id): Promise<{session_token: string, nonc
     return { session_token, nonce }
 }
 
-const tokenEndpoint = async (req, res) => {
-    const { grant_type, client_id, refresh_token, code } = req.body
+const tokenEndpoint = async (req: FastifyRequest, reply: FastifyReply) => {
+    const { grant_type, client_id, refresh_token, code } = req.body as
+        { grant_type: string, client_id: string, refresh_token: string, code: string }
 
     try {
         if (grant_type === 'authorization_code') {
             if (!client_id) {
-                return res.code(400).send({error:'invalid_request', error_description:'client_id is required'})
+                return reply.code(400).send({error:'invalid_request', error_description:'client_id is required'})
             }
             if (!code) {
-                return res.code(400).send({error:'invalid_request', error_description:'code is required'})
+                return reply.code(400).send({error:'invalid_request', error_description:'code is required'})
             }
-            const jwt = validateDPoP(req)
-            const newRefreshToken = refreshFromCode(code, jwt)
+            const jkt = validateDPoP(req)
+            const newRefreshToken = await refreshFromCode(code, client_id, jkt)
             const newAccessToken = accessFromRefresh(newRefreshToken)
-            return res.send({
+            return reply.send({
                 access_token: newAccessToken,
                 token_type: 'DPoP',
                 expires_in: ACCESS_LIFETIME,
@@ -251,12 +359,19 @@ const tokenEndpoint = async (req, res) => {
 
         if (grant_type === 'refresh_token') {
             if (!refresh_token){ 
-                return res.code(400).send({error:'invalid_request', error_description:'refresh_token is required'})
+                return reply.code(400).send({error:'invalid_request', error_description:'refresh_token is required'})
             }
-            const jwt = validateDPoP(req)
-            const newRefreshToken = refreshFromRefresh(refresh_token, jwt)
+            const jwk = validateDPoP(req)
+            const {payload} = jws.decode(refresh_token)
+            if (!payload?.cnf?.jkt) {
+                throw new TokenError(400, 'refresh_token is invalid')
+            }
+            if (payload.cnt.jkt !== jwk) {
+                throw new TokenError(400, 'DPoP jkt does not match refresh_token jkt')
+            }
+            const newRefreshToken = refreshFromRefresh(refresh_token)
             const newAccessToken = accessFromRefresh(newRefreshToken)
-            return res.send({
+            return reply.send({
                 access_token: newAccessToken,
                 token_type: 'DPoP',
                 expires_in: ACCESS_LIFETIME,
@@ -266,14 +381,14 @@ const tokenEndpoint = async (req, res) => {
 
         if (grant_type === 'cookie_token') { // non-standard
             if (!client_id) {
-                return res.code(400).send({error:'invalid_request', error_description:'client_id is required'})
+                return reply.code(400).send({error:'invalid_request', error_description:'client_id is required'})
             }
-            const { session_token, refresh_token } = req.cookies
+            const { session_token, refresh_token } = getCookies(req)
             if (!session_token && !refresh_token) {
                 // no existing session
                 const { session_token, nonce } = await makeSessionToken(client_id)
-                res.setCookie('session_token', session_token, { path: TOKEN_ENDPOINT })
-                return res.send({
+                setSessionCookie(reply, session_token )
+                return reply.send({
                     loggedIn: false,
                     nonce
                 })
@@ -284,47 +399,41 @@ const tokenEndpoint = async (req, res) => {
                 ? await refreshFromSession(session_token)
                 : refreshFromRefresh(refresh_token)
             const newAccessToken = accessFromRefresh(newRefreshToken)
-            res.setCookie('access_token', newAccessToken, { path: '/' })
-            res.setCookie('refresh_token', newRefreshToken, { path: TOKEN_ENDPOINT })
-            return res.send({
+            setTokenCookies(reply, newAccessToken, newRefreshToken)
+            return reply.send({
                 loggedIn: true
             })
         }
 
         if (grant_type === 'client_credentials') {
-            return res.code(501).send('Not Implemented')
+            return reply.code(501).send('Not Implemented')
         }
-        res.code(400).send({error:'unsupported_grant_type'})
+        reply.code(400).send({error:'unsupported_grant_type'})
     } catch (e) {
         const error = e as TokenError
         console.error(error)
-        res.code(error.statusCode).send({error: error.message})
+        reply.code(error.statusCode).send({error: error.message})
     }
 }
 
-const loginEndpoint = async (req, res) => {
-    const id_token = req.body.id_token
-    if (!id_token) {
-        return res.code(400).send({error:'invalid_request', error_description:'id_token is required'})
+const loginEndpoint = async (req: FastifyRequest, reply: FastifyReply) => {
+    const { sub, nonce } = req.body as { sub: string, nonce: string }
+    if (!sub) {
+        return reply.code(400).send({error:'invalid_request', error_description:'sub is required'})
     }
-    const { header, payload } = jws.decode(id_token)
-    if (!header || !payload) {
-        return res.code(400).send({error:'invalid_request', error_description:'id_token is invalid'})
+    if (!nonce) {
+        return reply.code(400).send({error:'invalid_request', error_description:'nonce is required'})
     }
-    // TODO verify id_token
-    // TODO create or update user
-
-    const { sub, nonce } = payload
     const currentState = await state.read(nonce)
     if (!currentState) {
-        return res.code(400).send({error:'invalid_request', error_description:'nonce is invalid'})
+        return reply.code(400).send({error:'invalid_request', error_description:'nonce is invalid'})
     }
     if (currentState.loggedIn) {
-        return res.code(400).send({error:'invalid_request', error_description:'nonce is already logged in'})
+        return reply.code(400).send({error:'invalid_request', error_description:'nonce is already logged in'})
     }
     const now = Math.floor(Date.now() / 1000)
     if (currentState.exp < now) {
-        return res.code(400).send({error:'invalid_request', error_description:'state has expired'})
+        return reply.code(400).send({error:'invalid_request', error_description:'state has expired'})
     }
 
     await state.update(nonce, { 
@@ -334,51 +443,22 @@ const loginEndpoint = async (req, res) => {
         loggedIn: true, 
         sub 
     })
-    res.code(202)
+    reply.code(202)
 }
 
-const app = fastify({
-    // TBD
-});
-
-app.post(LOGIN_ENDPOINT, loginEndpoint)
-
-app.post(TOKEN_ENDPOINT, tokenEndpoint)
-
-app.post(REVOCATION_ENDPOINT, (req, res) => {
-    res.code(501).send('Not Implemented')
-})
-
-app.get(JWKS_ENDPOINT, (req, res) => {
-    res.send(JWKS)
-})
-
-// OAuth 2.0 Authorization Server Metadata
-const META_DATA = {
-    issuer: BASE_URL,
-    token_endpoint: `${BASE_URL}${TOKEN_ENDPOINT}`,
-    jwks_uri: `${BASE_URL}${JWKS_ENDPOINT}`,
-    grant_types_supported: [
-        'authorization_code', 
-        'client_credentials', 
-        'refresh_token',
-        'cookie_token', // non-standard
-    ],
-    revocation_endpoint: `${BASE_URL}${REVOCATION_ENDPOINT}`,
-    dpop_signing_alg_values_supported: [
-        'RS256','ES256'
-    ],    
+const api = (app: FastifyInstance) => {
+    app.register(formbody);
+    app.post(LOGIN_ENDPOINT, loginEndpoint)
+    app.post(TOKEN_ENDPOINT, tokenEndpoint)
+    app.post(REVOCATION_ENDPOINT, (req, reply) => {
+        reply.code(501).send('Not Implemented')
+    })
+    app.get(JWKS_ENDPOINT, (req, reply) => {
+        reply.send(JWKS)
+    })
+    app.get('/.well-known/oauth-authorization-server', (req, reply) => {
+        reply.send(META_DATA)
+    })
 }
-app.get('/.well-known/oauth-authorization-server', (req, res) => {
-    res.send(META_DATA)
-})
 
-console.log('/.well-known/oauth-authorization-server', JSON.stringify(META_DATA, null, 2))
-
-app.listen({ port: PORT }, function (err, address) {
-    if (err) {
-      console.error(err);
-      process.exit(1);
-    }
-    console.log(`server listening on ${address}`);
-})
+export { api, PORT }
