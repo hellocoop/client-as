@@ -1,0 +1,23 @@
+{
+  "name": "as4mobile",
+  "version": "1.0.0",
+  "description": "Authorization Server for Mobile Apps",
+  "main": "index.js",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/node": "^20.11.28"
+  },
+  "dependencies": {
+    "fastify": "^4.26.2",
+    "jwk-thumbprint": "^0.1.4",
+    "jwk-to-pem": "^2.0.5",
+    "jws": "^4.0.0"
+  }
+}
