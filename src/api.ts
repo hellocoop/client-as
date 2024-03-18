@@ -11,24 +11,24 @@ import { serialize as serializeCookie, parse as parseCookies } from 'cookie'
 import { JWKS, PRIVATE_KEY, PUBLIC_KEY } from './jwks'
 import * as state from './state'
 
+import {
+    TOKEN_ENDPOINT,
+    REVOCATION_ENDPOINT,
+    JWKS_ENDPOINT,
+    LOGIN_ENDPOINT,
+    ACCESS_LIFETIME,
+    STATE_LIFETIME,
+    REFRESH_LIFETIME,
+    DPOP_LIFETIME
+} from './constants'
+
 const HOST = process.env.HOST
 const PORT: number = Number(process.env.PORT) || 3000
 
 const BASE_URL = (HOST)
     ? `https://${HOST}`
     : `http://localhost:${PORT}`
-
-const TOKEN_ENDPOINT = '/token'
-const REVOCATION_ENDPOINT = '/revoke'
-const JWKS_ENDPOINT = '/jwks'
-const LOGIN_ENDPOINT = '/login'
-
 const HTU = BASE_URL + TOKEN_ENDPOINT
-
-const ACCESS_LIFETIME = 5 * 60              // 5 minutes
-const STATE_LIFETIME = 5 * 60               // 5 minutes
-const REFRESH_LIFETIME = 30 * 24 * 60 * 60  // 30 days
-const DPOP_LIFETIME = 60                    // 1 minute for clock skew
 
 const PRODUCTION = (process.env.NODE_ENV === 'production')
 
@@ -122,7 +122,7 @@ const validateDPoP = (req: FastifyRequest): string => {
     if (Array.isArray(dpop)) {
         throw new TokenError(400, 'Only one DPoP header is allowed')
     }
-    const { header, payload } = jws.decode(dpop as string)
+    const { header, payload } = jws.decode(dpop as string, { json: true })
     if (!header || !payload) {
         throw new TokenError(400, 'DPoP header is invalid')
     }
@@ -151,11 +151,9 @@ const validateDPoP = (req: FastifyRequest): string => {
         throw new TokenError(400, 'DPoP path is invalid')
     }
     const pem = jwkToPem(jwk)
-    try {
-        const decoded = jws.verify(dpop, alg, pem)
-    } catch (e) {
+
+    if (!jws.verify(dpop, alg, pem))
         throw new TokenError(400, 'DPoP signature is invalid')
-    }
     const jkt = jwkThumbprintByEncoding(jwk, 'SHA-256', 'base64url')
     return jkt
 }   
@@ -209,16 +207,12 @@ const refreshFromCode = async (code: string, client_id: string, jkt: string): Pr
 }
 
 const refreshFromRefresh = (refresh_token: string): string => {
-    const { header, payload } = jws.decode(refresh_token)
+    const { header, payload } = jws.decode(refresh_token, { json: true })
     if (!header || !payload) {
         throw new TokenError(400, 'refresh_token is invalid')
     }
-    try {
-        const decoded = jws.verify(refresh_token, header.alg, PUBLIC_KEY)
-    } catch (e) {
-        throw new 
-        TokenError(400, 'refresh_token is invalid')
-    }
+    if (!jws.verify(refresh_token, header.alg, PUBLIC_KEY))
+        throw new TokenError(400, 'refresh_token is invalid')
     const now = Math.floor(Date.now() / 1000)
     if (payload.exp < now) {
         throw new TokenError(400, 'refresh_token is expired')
@@ -237,7 +231,7 @@ const refreshFromRefresh = (refresh_token: string): string => {
 
 const refreshFromSession = async (session_token: string) => {
     // lookup session_token and get payload 
-    const { header, payload } = jws.decode(session_token)
+    const { header, payload } = jws.decode(session_token, { json: true })
     // TODO -- verify session_token
     if (!header || !payload) {
         throw new TokenError(400, 'session_token is invalid')
@@ -279,7 +273,7 @@ const refreshFromSession = async (session_token: string) => {
 }
 
 const accessFromRefresh = (refresh_token: string): string => {
-    const { header, payload } = jws.decode(refresh_token)
+    const { header, payload } = jws.decode(refresh_token, { json: true })
     if (!header || !payload) {
         throw new TokenError(400, 'refresh_token is invalid')
     }
@@ -291,12 +285,8 @@ const accessFromRefresh = (refresh_token: string): string => {
     if (payload.exp < now) {
         throw new TokenError(400, 'refresh_token is expired')
     }
-    try {
-        const decoded = jws.verify(refresh_token, header.alg, PUBLIC_KEY)
-    } catch (e) {
-        throw new 
-        TokenError(400, 'refresh_token is invalid')
-    }
+    if (!jws.verify(refresh_token, header.alg, PUBLIC_KEY))
+        throw new TokenError(400, 'refresh_token is invalid')
     payload.token_type = 'access_token'
     payload.iat = now
     payload.exp = now + ACCESS_LIFETIME
@@ -319,7 +309,7 @@ const makeSessionToken = async (client_id: string): Promise<{session_token: stri
         nonce
     }
     await state.create(nonce, currentState)
-    const session_token = jws.sign({
+    const params = {
         header: JWT_HEADER,
         payload: {
             token_type: 'session_token',
@@ -330,7 +320,8 @@ const makeSessionToken = async (client_id: string): Promise<{session_token: stri
             nonce
         },
         privateKey: PRIVATE_KEY
-    })
+    }
+    const session_token = jws.sign(params)
     return { session_token, nonce }
 }
 
@@ -362,7 +353,7 @@ const tokenEndpoint = async (req: FastifyRequest, reply: FastifyReply) => {
                 return reply.code(400).send({error:'invalid_request', error_description:'refresh_token is required'})
             }
             const jwk = validateDPoP(req)
-            const {payload} = jws.decode(refresh_token)
+            const {payload} = jws.decode(refresh_token, { json: true })
             if (!payload?.cnf?.jkt) {
                 throw new TokenError(400, 'refresh_token is invalid')
             }
