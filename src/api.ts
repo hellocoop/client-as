@@ -221,13 +221,15 @@ const refreshFromRefresh = (refresh_token: string): string => {
 // FUTURE -- check if user has been logged out since refresh_token was issued
 
     payload.iat = now
-    payload.exp = now + ACCESS_LIFETIME
+    payload.exp = now + REFRESH_LIFETIME
+    payload.jti = randomUUID()
     const newRefreshToken = jws.sign({
         header: JWT_HEADER,
         payload,
         privateKey: PRIVATE_KEY
     })
-    return newRefreshToken}
+    return newRefreshToken
+}
 
 const refreshFromSession = async (session_token: string) => {
     // lookup session_token and get payload 
@@ -329,6 +331,9 @@ const tokenEndpoint = async (req: FastifyRequest, reply: FastifyReply) => {
     const { grant_type, client_id, refresh_token, code } = req.body as
         { grant_type: string, client_id: string, refresh_token: string, code: string }
 
+    // console.log({grant_type, headers: req.headers, cookies: req.headers['cookie']})
+
+
     try {
         if (grant_type === 'authorization_code') {
             if (!client_id) {
@@ -360,6 +365,8 @@ const tokenEndpoint = async (req: FastifyRequest, reply: FastifyReply) => {
             if (payload.cnt.jkt !== jwk) {
                 throw new TokenError(400, 'DPoP jkt does not match refresh_token jkt')
             }
+            if (!jws.verify(refresh_token, 'RS256', PUBLIC_KEY))
+                throw new TokenError(400, 'refresh_token is invalid')
             const newRefreshToken = refreshFromRefresh(refresh_token)
             const newAccessToken = accessFromRefresh(newRefreshToken)
             return reply.send({
@@ -386,9 +393,9 @@ const tokenEndpoint = async (req: FastifyRequest, reply: FastifyReply) => {
             }
 
             // we have an existing session
-            const newRefreshToken = (session_token)
-                ? await refreshFromSession(session_token)
-                : refreshFromRefresh(refresh_token)
+            const newRefreshToken = (refresh_token)
+                ? refreshFromRefresh(refresh_token)
+                : await refreshFromSession(session_token)
             const newAccessToken = accessFromRefresh(newRefreshToken)
             setTokenCookies(reply, newAccessToken, newRefreshToken)
             return reply.send({
@@ -409,6 +416,10 @@ const tokenEndpoint = async (req: FastifyRequest, reply: FastifyReply) => {
 
 const loginEndpoint = async (req: FastifyRequest, reply: FastifyReply) => {
     const { sub, nonce } = req.body as { sub: string, nonce: string }
+
+    // console.log({sub, nonce, headers: req.headers, cookies: req.headers['cookie']})
+
+
     if (!sub) {
         return reply.code(400).send({error:'invalid_request', error_description:'sub is required'})
     }

@@ -8,7 +8,7 @@
   },
   "scripts": {
     "build": "rimraf dist && tsc -p tsconfig.prod.json",
-    "test": "mocha -r ts-node/register tests/**/*.ts"
+    "test": "mocha -r ts-node/register tests/**/*.spec.ts"
   },
   "author": "",
   "license": "ISC",
