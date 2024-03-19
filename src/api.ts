@@ -21,7 +21,6 @@ import {
     REFRESH_LIFETIME,
     DPOP_LIFETIME
 } from './constants'
-import { access } from 'fs';
 
 interface Payload {
     iss: string
