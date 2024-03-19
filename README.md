@@ -1,28 +1,55 @@
 # AS4Mobile
 Authorization Server for Mobile Apps
 
+## Environment Configuration
+
+### PORT
+- default 3000
+http port to listen on 
+
+### HOST
+- default `http://localhost:${PORT}`
+hostname to be used in issuer ('iss' claim in access_token) -- will be `https:${HOST}` 
+
+### NODE_ENV
+- default is `undefined`
+`'production'|'development'`
+
+### REDIS_HOST
+tbd
+
+
+### SUPPRESS_DPOP_CHECK
+- default is `undefined`
+set to any value to disable checking for DPoP header and returns `"token_type":"Bearer"` rather than `"token_type":"DPoP"` from token endpoint
 
 ## Webview 
-
+```
 POST /token HTTP/1.1
 Host: app.tiltingpoint.com
 Content-Type: application/x-www-form-urlencoded
 
 grant_type=cookie_token
-
+```
+returns
+```
 200
 {
     "loggedIn":false,
     "nonce":"1234567890"
 }
+```
+User is not logged in. Start a login flow with the returned nonce value. Once logged in, it will return
 
-User is not logged in. Start a login flow with the returned nonce value.
+```
+200
 
 {
     "loggedIn":true
 }
+```
 
-User is logged in. access_token and refresh_token cookies have been updated
+User is logged in. access_token and refresh_token cookies have been created and updated
 
 
 ## SDK
