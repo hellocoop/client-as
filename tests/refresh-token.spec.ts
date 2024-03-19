@@ -11,6 +11,7 @@ import {
     REVOCATION_ENDPOINT,
     JWKS_ENDPOINT,
     LOGIN_ENDPOINT,
+    INTROSPECTION_ENDPOINT,
     ACCESS_LIFETIME,
     STATE_LIFETIME,
     REFRESH_LIFETIME,
@@ -268,6 +269,29 @@ describe('Refresh Token', () => {
 
         assert.notStrictEqual(newAccessToken, access_token, 'access_token value has not changed');
         assert.notStrictEqual(newRefreshToken, refresh_token, 'refresh_token value has not changed');
+    })
+
+    it ('should introspect the access token', async () => {
+        const headers: Record<string, any> = {
+            'Content-Type': 'application/x-www-form-urlencoded'
+        }
+        const response = await app.inject({
+            method: 'POST',
+            url: INTROSPECTION_ENDPOINT,
+            headers,
+            payload: `token=${access_token}`  
+        });
+        assert.strictEqual(response.statusCode, 200, 'Status code is not 200');
+        const json = response.json();
+        assert(json, 'Response is not JSON');
+        assert.strictEqual(json.active, true, 'Token is not active');
+        assert.strictEqual(json.client_id, SDK_CLIENT_ID, `client_id is not ${SDK_CLIENT_ID}`);
+        assert.strictEqual(json.iss, "http://localhost:3000", 'iss is not http://localhost:3000');
+        assert.strictEqual(json.token_type, 'access_token', 'token_type is not access_token');
+        assert.strictEqual(json.sub, TEST_USER.sub, `sub is not ${TEST_USER.sub}`);
+        if (USE_DPOP) {
+            assert.strictEqual(json?.cnf?.jkt, publicKeyThumbprint, 'cnf.jkt is not the same as our thumbprint');
+        }
     })
 
 })

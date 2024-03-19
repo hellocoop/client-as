@@ -15,6 +15,7 @@ import {
     REVOCATION_ENDPOINT,
     JWKS_ENDPOINT,
     LOGIN_ENDPOINT,
+    INTROSPECTION_ENDPOINT,
     ACCESS_LIFETIME,
     STATE_LIFETIME,
     REFRESH_LIFETIME,
@@ -493,10 +494,30 @@ const loginEndpoint = async (req: FastifyRequest, reply: FastifyReply) => {
     reply.code(202)
 }
 
+const introspectEndpoint = async (req: FastifyRequest, reply: FastifyReply) => {
+    const { token } = req.body as { token: string }
+
+    if (!token) {
+        return reply.code(400).send({error:'invalid_request', error_description:'token is required'})
+    }
+    if (!jws.verify(token, 'RS256', PUBLIC_KEY))
+        return reply.send({active: false})
+    const { payload } = jws.decode(token, { json: true })
+    if (!payload) {
+        return reply.send({active: false})
+    }
+    const now = Math.floor(Date.now() / 1000)
+    if (payload.exp < now) {
+        return reply.send({active: false})
+    }
+    reply.send({active: true, ...payload})
+}
+
 const api = (app: FastifyInstance) => {
     app.register(formbody);
     app.post(LOGIN_ENDPOINT, loginEndpoint)
     app.post(TOKEN_ENDPOINT, tokenEndpoint)
+    app.post(INTROSPECTION_ENDPOINT, introspectEndpoint)
     app.post(REVOCATION_ENDPOINT, (req, reply) => {
         reply.code(501).send('Not Implemented')
     })

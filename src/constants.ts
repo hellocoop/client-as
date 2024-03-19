@@ -4,6 +4,7 @@ export const TOKEN_ENDPOINT = '/token'
 export const REVOCATION_ENDPOINT = '/revoke'
 export const JWKS_ENDPOINT = '/jwks'
 export const LOGIN_ENDPOINT = '/login'
+export const INTROSPECTION_ENDPOINT = '/introspect'
 
 export const ACCESS_LIFETIME = 5 * 60              // 5 minutes
 export const STATE_LIFETIME = 5 * 60               // 5 minutes
