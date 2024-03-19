@@ -7,7 +7,7 @@ const app: FastifyInstance = Fastify()
 
 api(app)
 
-app.listen({ port: PORT }, function (err, address) {
+app.listen({ host: '0.0.0.0', port: PORT }, function (err, address) {
     if (err) {
       console.error(err);
       process.exit(1);
