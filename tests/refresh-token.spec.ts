@@ -83,6 +83,7 @@ describe('Refresh Token', () => {
     let access_token: string
     let jwks_uri: string
     let issuerPublicKeyPem: string
+    let kid: string
 
     before(async () => {
         await generateKeys()
@@ -128,6 +129,8 @@ describe('Refresh Token', () => {
         const key = keys[0];
         assert(key, 'Key does not exist');
         assert.strictEqual(key.kty, 'RSA', 'Key kty is not RSA');
+        assert(key.kid, 'Key kid does not exist');
+        kid = key.kid;
         issuerPublicKeyPem = jwkToPem(key);
         assert(issuerPublicKeyPem, 'issuerPublicKeyPem does not exist');
         assert(issuerPublicKeyPem.startsWith('-----BEGIN PUBLIC KEY-----'), 'issuerPublicKeyPem is not a public key');
@@ -186,6 +189,7 @@ describe('Refresh Token', () => {
         assert(accessHeader, 'access_token cookie value is not a valid JWT');
         assert.strictEqual(accessHeader.alg, 'RS256', 'access_token alg is not RS256');
         assert.strictEqual(accessHeader.typ, 'at+jwt', 'access_token typ is not at+jwt');
+        assert.strictEqual(accessHeader.kid, kid, 'access_token kid is not the same as the jwks kid')
         if (USE_DPOP) {
             assert(accessPayload?.cnf?.jkt, 'access_token cnf.jkt does not exist');
             assert.strictEqual(accessPayload?.cnf?.jkt, publicKeyThumbprint, 'access_token cnf.jkt is not the same as our thumbprint');
@@ -199,6 +203,7 @@ describe('Refresh Token', () => {
         const { header: refreshHeader, payload: refreshPayload } = jws.decode(refresh_token, { json: true });
         assert(refreshHeader, 'refresh_token cookie value is not a valid JWT');
         assert.strictEqual(refreshHeader.alg, 'RS256', 'refresh_token alg is not RS256');
+        assert.strictEqual(refreshHeader.kid, kid, 'refresh_token kid is not the same as the jwks kid');
         if (USE_DPOP) {
             assert(refreshPayload?.cnf?.jkt, 'refresh_token cnf.jkt does not exist');
             assert.strictEqual(refreshPayload?.cnf?.jkt, publicKeyThumbprint, 'refresh_token cnf.jkt is not the same as our thumbprint');
@@ -235,6 +240,7 @@ describe('Refresh Token', () => {
         assert(accessHeader, 'access_token cookie value is not a valid JWT');
         assert.strictEqual(accessHeader.alg, 'RS256', 'access_token alg is not RS256');
         assert.strictEqual(accessHeader.typ, 'at+jwt', 'access_token typ is not at+jwt');
+        assert.strictEqual(accessHeader.kid, kid, 'access_token kid is not the same as the jwks kid')
         if (USE_DPOP) {
             assert(accessPayload?.cnf?.jkt, 'access_token cnf.jkt does not exist');
             assert.strictEqual(accessPayload?.cnf?.jkt, publicKeyThumbprint, 'access_token cnf.jkt is not the same as our thumbprint');
@@ -248,6 +254,7 @@ describe('Refresh Token', () => {
         const { header: refreshHeader, payload: refreshPayload } = jws.decode(newRefreshToken, { json: true });
         assert(refreshHeader, 'refresh_token cookie value is not a valid JWT');
         assert.strictEqual(refreshHeader.alg, 'RS256', 'refresh_token alg is not RS256');
+        assert.strictEqual(refreshHeader.kid, kid, 'refresh_token kid is not the same as the jwks kid');
         if (USE_DPOP) {
             assert(refreshPayload?.cnf?.jkt, 'refresh_token cnf.jkt does not exist');
             assert.strictEqual(refreshPayload?.cnf?.jkt, publicKeyThumbprint, 'refresh_token cnf.jkt is not the same as our thumbprint');
