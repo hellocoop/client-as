@@ -121,7 +121,16 @@ const setTokenCookies = (reply: FastifyReply, access_token: string, refresh_toke
         sameSite: 'strict',
     })
 
-    reply.header('Set-Cookie', [accessTokenCookie, refreshTokenCookie]);
+    // always clear session_token
+    const sessionTokenCookie = serializeCookie('session_token', '', {
+        maxAge: 0,
+        httpOnly: true,
+        path: TOKEN_ENDPOINT,
+        secure: PRODUCTION,
+        sameSite: 'strict',
+    })    
+
+    reply.header('Set-Cookie', [accessTokenCookie, refreshTokenCookie, sessionTokenCookie]);
 }
 
 const setSessionCookie = (reply: FastifyReply, session_token: string) => {

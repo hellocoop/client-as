@@ -179,22 +179,30 @@ describe('Cookie Token', () => {
         const loggedIn = json.loggedIn;
         assert(loggedIn === true, 'User is not logged in');
         const cookies = getCookies(response as unknown as { cookies: Cookie[] })
+
+        assert(cookies['session_token'], 'session_token cookie does not exist');
+        const sessionCookie = cookies['session_token'];
+        assert.strictEqual(sessionCookie.maxAge, 0, 'session_token cookie maxAge is not zero');
+        assert.strictEqual(sessionCookie.value, '', 'session_token cookie value is not empty');
+
         assert(cookies['access_token'], 'access_token cookie does not exist');
-        assert(cookies['refresh_token'], 'refresh_token cookie does not exist');
         const accessCookie = cookies['access_token'];
-        const refreshCookie = cookies['refresh_token'];
         assert(accessCookie.httpOnly, 'access_token cookie is not httpOnly');
         assert(accessCookie.sameSite, 'access_token cookie does not have sameSite');
         assert.strictEqual(accessCookie.sameSite, 'Strict', 'access_token cookie sameSite is not Strict');
         assert(accessCookie.maxAge, 'access_token cookie does not have maxAge');
         assert.strictEqual(accessCookie.maxAge, ACCESS_LIFETIME, `access_token cookie maxAge is not ${ACCESS_LIFETIME}`);
         assert.strictEqual(accessCookie.path, '/', 'access_token cookie path is not /');
+
+        assert(cookies['refresh_token'], 'refresh_token cookie does not exist');
+        const refreshCookie = cookies['refresh_token'];
         assert(refreshCookie.httpOnly, 'refresh_token cookie is not httpOnly');
         assert(refreshCookie.sameSite, 'refresh_token cookie does not have sameSite');
         assert.strictEqual(refreshCookie.sameSite, 'Strict', 'refresh_token cookie sameSite is not Strict');
         assert(refreshCookie.maxAge, 'refresh_token cookie does not have maxAge');
         assert.strictEqual(refreshCookie.maxAge, REFRESH_LIFETIME, `refresh_token cookie maxAge is not ${REFRESH_LIFETIME}`);
         assert.strictEqual(refreshCookie.path, TOKEN_ENDPOINT, `refresh_token cookie path is not ${TOKEN_ENDPOINT}`);
+
         const { header: accessHeader, payload: accessPayload } = jws.decode(accessCookie.value, { json: true });
         assert(accessHeader, 'access_token cookie value is not a valid JWT');
         assert.strictEqual(accessHeader.alg, 'RS256', 'access_token alg is not RS256');
@@ -205,6 +213,7 @@ describe('Cookie Token', () => {
         assert.strictEqual(accessPayload.client_id, WEBVIEW_CLIENT_ID, `access_token aud is not ${WEBVIEW_CLIENT_ID}`);
         assert.strictEqual(accessPayload.exp - accessPayload.iat, ACCESS_LIFETIME, `access_token exp - iat is not ${ACCESS_LIFETIME}`);
         assert.strictEqual(accessPayload.token_type, 'access_token', 'access_token token_type is not access_token');
+
         const { header: refreshHeader, payload: refreshPayload } = jws.decode(refreshCookie.value, { json: true });
         assert(refreshHeader, 'refresh_token cookie value is not a valid JWT');
         assert.strictEqual(refreshHeader.alg, 'RS256', 'refresh_token alg is not RS256');
