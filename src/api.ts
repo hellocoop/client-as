@@ -4,8 +4,7 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import formbody from '@fastify/formbody';
 import jws, { Algorithm, Header } from 'jws'
 import jwkToPem, { JWK } from 'jwk-to-pem'
-import { jwkThumbprintByEncoding } from 'jwk-thumbprint';
-import { randomUUID } from 'crypto';
+import { randomUUID, createHash } from 'crypto';
 import { serialize as serializeCookie, parse as parseCookies } from 'cookie'
 
 import { JWKS, PRIVATE_KEY, PUBLIC_KEY } from './jwks'
@@ -22,8 +21,24 @@ import {
     DPOP_LIFETIME
 } from './constants'
 
+interface Payload {
+    iss: string
+    sub: string
+    aud: string
+    client_id: string
+    token_type: string
+    iat: number
+    exp: number
+    jti: string
+    cnf?: {
+        jkt: string
+    }
+
+}
+
 const HOST = process.env.HOST
 const PORT: number = Number(process.env.PORT) || 3000
+const USE_DPOP: boolean = !process.env.SUPPRESS_DPOP_CHECK
 
 const BASE_URL = (HOST)
     ? `https://${HOST}`
@@ -44,7 +59,15 @@ const AT_HEADER: Header = {
 }
 
 // OAuth 2.0 Authorization Server Metadata
-const META_DATA = {
+interface MetaData {
+    issuer: string;
+    token_endpoint: string;
+    jwks_uri: string;
+    grant_types_supported: string[];
+    revocation_endpoint: string;
+    dpop_signing_alg_values_supported?: string[];
+}
+const META_DATA: MetaData = {
     issuer: BASE_URL,
     token_endpoint: `${BASE_URL}${TOKEN_ENDPOINT}`,
     jwks_uri: `${BASE_URL}${JWKS_ENDPOINT}`,
@@ -54,11 +77,12 @@ const META_DATA = {
         'refresh_token',
         'cookie_token', // non-standard
     ],
-    revocation_endpoint: `${BASE_URL}${REVOCATION_ENDPOINT}`,
-    dpop_signing_alg_values_supported: [
-        'RS256','ES256'
-    ],    
+    revocation_endpoint: `${BASE_URL}${REVOCATION_ENDPOINT}`,   
 }
+if (USE_DPOP) {
+    META_DATA.dpop_signing_alg_values_supported = ['RS256']
+}
+
 
 // console.log('/.well-known/oauth-authorization-server', JSON.stringify(META_DATA, null, 2))
 
@@ -71,6 +95,12 @@ class TokenError extends Error {
       Object.setPrototypeOf(this, TokenError.prototype); // Fix prototype chain
       Error.captureStackTrace(this, this.constructor);
     }
+}
+
+const generateThumbprint = function(jwk: JWK) {
+    const ordered = JSON.stringify(jwk, Object.keys(jwk).sort());
+    const hash = createHash('sha256').update(ordered).digest('base64url');
+    return hash;
 }
 
 const setTokenCookies = (reply: FastifyReply, access_token: string, refresh_token: string) => {
@@ -115,7 +145,9 @@ const getCookies = (req: FastifyRequest): Record<string, string> => {
 }
 
 const validateDPoP = (req: FastifyRequest): string => {
-    const dpop = req.headers['DPoP']
+    if (!USE_DPOP)
+        return ''
+    const dpop = req.headers['dpop']
     if (!dpop) {
         throw new TokenError(400, 'DPoP header is required')
     }
@@ -130,7 +162,7 @@ const validateDPoP = (req: FastifyRequest): string => {
     if (typ !== 'dpop+jwt') {
         throw new TokenError(400, 'DPoP typ is invalid')
     }
-    if (META_DATA.dpop_signing_alg_values_supported.indexOf(alg) === -1){
+    if (META_DATA?.dpop_signing_alg_values_supported?.indexOf(alg) === -1){
         throw new TokenError(400, 'DPoP alg is invalid')
     }
     if (!jwk) {
@@ -154,7 +186,7 @@ const validateDPoP = (req: FastifyRequest): string => {
 
     if (!jws.verify(dpop, alg, pem))
         throw new TokenError(400, 'DPoP signature is invalid')
-    const jkt = jwkThumbprintByEncoding(jwk, 'SHA-256', 'base64url')
+    const jkt = generateThumbprint(jwk)
     return jkt
 }   
 
@@ -181,16 +213,18 @@ const refreshFromCode = async (code: string, client_id: string, jkt: string): Pr
     currentState.code_used = now 
     await state.update(code, currentState)
 
-    const payload = {
+    const payload: Payload = {
         iss: BASE_URL,
-        sub: currentState.sub,
-        aud: currentState.aud,
+        sub: currentState.sub as string,
+        aud: currentState.aud as string,
         client_id,
         token_type: 'refresh_token',
         iat: now,
         exp: now + REFRESH_LIFETIME,
         jti: randomUUID(),
-        cnf: {
+    }
+    if (USE_DPOP) {
+        payload.cnf = {
             jkt: jkt
         }
     }
@@ -347,7 +381,7 @@ const tokenEndpoint = async (req: FastifyRequest, reply: FastifyReply) => {
             const newAccessToken = accessFromRefresh(newRefreshToken)
             return reply.send({
                 access_token: newAccessToken,
-                token_type: 'DPoP',
+                token_type: USE_DPOP ? 'DPoP' : 'Bearer',
                 expires_in: ACCESS_LIFETIME,
                 refresh_token: newRefreshToken
             })
@@ -357,13 +391,15 @@ const tokenEndpoint = async (req: FastifyRequest, reply: FastifyReply) => {
             if (!refresh_token){ 
                 return reply.code(400).send({error:'invalid_request', error_description:'refresh_token is required'})
             }
-            const jwk = validateDPoP(req)
+            const jwt = validateDPoP(req)
             const {payload} = jws.decode(refresh_token, { json: true })
-            if (!payload?.cnf?.jkt) {
-                throw new TokenError(400, 'refresh_token is invalid')
-            }
-            if (payload.cnt.jkt !== jwk) {
-                throw new TokenError(400, 'DPoP jkt does not match refresh_token jkt')
+            if (USE_DPOP) {
+                if (!payload?.cnf?.jkt) {
+                    throw new TokenError(400, 'refresh_token is invalid')
+                }
+                if (payload.cnf.jkt !== jwt) {
+                    throw new TokenError(400, 'DPoP jkt does not match refresh_token jkt')
+                }
             }
             if (!jws.verify(refresh_token, 'RS256', PUBLIC_KEY))
                 throw new TokenError(400, 'refresh_token is invalid')
@@ -371,7 +407,7 @@ const tokenEndpoint = async (req: FastifyRequest, reply: FastifyReply) => {
             const newAccessToken = accessFromRefresh(newRefreshToken)
             return reply.send({
                 access_token: newAccessToken,
-                token_type: 'DPoP',
+                token_type: USE_DPOP ? 'DPoP' : 'Bearer',
                 expires_in: ACCESS_LIFETIME,
                 refresh_token: newRefreshToken
             })
