@@ -8,7 +8,7 @@
   },
   "scripts": {
     "build": "rimraf dist && tsc -p tsconfig.prod.json",
-    "test": "mocha -r ts-node/register tests/**/*.spec.ts && SUPPRESS_DPOP_CHECK=true mocha -r ts-node/register tests/refresh-token.spec.ts"
+    "test": "mocha -r ts-node/register tests/*.spec.ts && SUPPRESS_DPOP_CHECK=true mocha -r ts-node/register tests/refresh-token.spec.ts"
   },
   "author": "",
   "license": "ISC",
