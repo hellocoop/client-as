@@ -19,17 +19,26 @@ type State = {
 const state: Record<string, State> = {};
 
 const read = async (key: string): Promise<State | undefined> => {
-return state[key];
+
+// console.log('state.read',{ key, state })
+
+  return state[key];  
 }
 
 const create = async (key: string, value: State): Promise<void> => {
+
+// console.log('state.create',{ key, value })
+
   state[key] = value;
   return;
 }
 
 const update = async (key: string, value: State): Promise<void> => {
-state[key] = value;
-return;
+
+// console.log('state.update',{ key, value })
+
+  state[key] = value;
+  return;
 }
 
 export { create, read, update, State };
