@@ -21,6 +21,7 @@ import {
     REFRESH_LIFETIME,
     DPOP_LIFETIME
 } from './constants'
+import { access } from 'fs';
 
 interface Payload {
     iss: string
@@ -461,10 +462,10 @@ const tokenEndpoint = async (req: FastifyRequest, reply: FastifyReply) => {
 }
 
 const loginEndpoint = async (req: FastifyRequest, reply: FastifyReply) => {
+
+// console.log('loginEndpoint', { body: req.body } )
+
     const { sub, nonce } = req.body as { sub: string, nonce: string }
-
-    // console.log({sub, nonce, headers: req.headers, cookies: req.headers['cookie']})
-
 
     if (!sub) {
         return reply.code(400).send({error:'invalid_request', error_description:'sub is required'})
@@ -491,11 +492,18 @@ const loginEndpoint = async (req: FastifyRequest, reply: FastifyReply) => {
         loggedIn: true, 
         sub 
     })
-    reply.code(202)
+    reply.code(202).send({})
 }
 
 const introspectEndpoint = async (req: FastifyRequest, reply: FastifyReply) => {
-    const { token } = req.body as { token: string }
+    let token: string = ''
+    
+    if (req.method === 'POST') {
+        ({ token } = req?.body as { token: string })
+    } else if (req.method === 'GET') {
+        const cookies = getCookies(req)
+        token = cookies?.access_token
+    }
 
     if (!token) {
         return reply.code(400).send({error:'invalid_request', error_description:'token is required'})
@@ -518,6 +526,7 @@ const api = (app: FastifyInstance) => {
     app.post(LOGIN_ENDPOINT, loginEndpoint)
     app.post(TOKEN_ENDPOINT, tokenEndpoint)
     app.post(INTROSPECTION_ENDPOINT, introspectEndpoint)
+    app.get(INTROSPECTION_ENDPOINT, introspectEndpoint)
     app.post(REVOCATION_ENDPOINT, (req, reply) => {
         reply.code(501).send('Not Implemented')
     })
