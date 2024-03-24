@@ -1,10 +1,13 @@
-// session 
+// store state of auth 
 
-// hack for dev
+import Redis from 'ioredis';
+import { STATE_LIFETIME } from './constants';
 
-// connect to Redis server
+let redis: Redis | undefined;
 
-// use exp to set the expiration time for the key
+if (process.env.REDIS_URL) {
+  redis = new Redis(process.env.REDIS_URL);
+}
 
 type State = {
   loggedIn: boolean,
@@ -19,26 +22,28 @@ type State = {
 const state: Record<string, State> = {};
 
 const read = async (key: string): Promise<State | undefined> => {
-
-// console.log('state.read',{ key, state })
-
-  return state[key];  
+  if (redis) {
+    const value = await redis.get(key);
+    return value ? JSON.parse(value) : undefined;
+  } else {
+    return state[key];
+  }
 }
 
 const create = async (key: string, value: State): Promise<void> => {
-
-// console.log('state.create',{ key, value })
-
-  state[key] = value;
-  return;
+  if (redis) {
+    await redis.set(key, JSON.stringify(value));
+  } else {
+    state[key] = value;
+  }
 }
 
 const update = async (key: string, value: State): Promise<void> => {
-
-// console.log('state.update',{ key, value })
-
-  state[key] = value;
-  return;
+  if (redis) {
+    await redis.set(key, JSON.stringify(value), 'EX', STATE_LIFETIME);
+  } else {
+    state[key] = value;
+  }
 }
 
 export { create, read, update, State };
