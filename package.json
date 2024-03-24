@@ -7,6 +7,7 @@
     "test": "test"
   },
   "scripts": {
+    "start": "node dist/index.js",
     "build": "rimraf dist && tsc -p tsconfig.prod.json",
     "test": "mocha -r ts-node/register tests/*.spec.ts && SUPPRESS_DPOP_CHECK=true mocha -r ts-node/register tests/refresh-token.spec.ts"
   },
@@ -28,6 +29,7 @@
     "cookie": "^0.6.0",
     "fastify": "^4.26.2",
     "jwk-to-pem": "^2.0.5",
-    "jws": "^4.0.0"
+    "jws": "^4.0.0",
+    "nanoid": "^5.0.6"
   }
 }

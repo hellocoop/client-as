@@ -7,7 +7,7 @@ import jwkToPem, { JWK } from 'jwk-to-pem'
 import { randomUUID, createHash } from 'crypto';
 import { serialize as serializeCookie, parse as parseCookies } from 'cookie'
 
-import { JWKS, PRIVATE_KEY, PUBLIC_KEY } from './jwks'
+import { PUBLIC_JWKS, PRIVATE_KEY, PUBLIC_KEY } from './jwks'
 import * as state from './state'
 
 import {
@@ -51,12 +51,12 @@ const PRODUCTION = (process.env.NODE_ENV === 'production')
 const JWT_HEADER: Header = {
     alg: 'RS256',
     typ: 'jwt',
-    kid: JWKS.keys[0].kid
+    kid: PUBLIC_JWKS.keys[0].kid
 }
 const AT_HEADER: Header = {
     alg: 'RS256',
     typ: 'at+jwt',
-    kid: JWKS.keys[0].kid
+    kid: PUBLIC_JWKS.keys[0].kid
 }
 
 // OAuth 2.0 Authorization Server Metadata
@@ -367,6 +367,7 @@ const makeSessionToken = async (client_id: string): Promise<{session_token: stri
         },
         privateKey: PRIVATE_KEY
     }
+
     const session_token = jws.sign(params)
     return { session_token, nonce }
 }
@@ -530,7 +531,7 @@ const api = (app: FastifyInstance) => {
         reply.code(501).send('Not Implemented')
     })
     app.get(JWKS_ENDPOINT, (req, reply) => {
-        reply.send(JWKS)
+        reply.send(PUBLIC_JWKS)
     })
     app.get('/.well-known/oauth-authorization-server', (req, reply) => {
         reply.send(META_DATA)
