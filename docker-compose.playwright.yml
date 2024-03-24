@@ -7,18 +7,27 @@ networks:
 
 services:
 
+  redis:
+    image: redis:latest
+    networks:
+      - test
+    ports:
+      - '6379:6379'
+
+
   as:
     image: as 
     build:
-      context: ../
+      context: .
     networks:
       - test
     ports:
       - '3000:3000'
       # debugger
       - '9229:9229'
-    # environment:
-    
+    environment:
+      REDIS_URL: redis://redis:6379
+
   mockin:
     image: hellocoop/mockin:latest
     networks:
@@ -49,7 +58,7 @@ services:
   client:
     image: client
     build: 
-      context: ../../docker-client
+      context: ../docker-client
     networks: 
       - test
     ports:
@@ -64,3 +73,4 @@ services:
     extra_hosts:
       - "wallet.hello-dev.net:host-gateway"
     # command: npm run debug
+
