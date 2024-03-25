@@ -1,12 +1,14 @@
 import assert from 'assert';
 import Fastify, { FastifyInstance, LightMyRequestResponse } from 'fastify';
 import jws from 'jws'
+import { LoginTriggerParams } from '@hellocoop/fastify';
 import jwkToPem, { JWK } from 'jwk-to-pem'
 import { webcrypto, createHash, randomUUID } from 'crypto';
 const { subtle } = webcrypto;
 
-import { api } from '../src/api';
+import { api, loginTrigger } from '../src/api';
 import {
+    API_ROOT,
     TOKEN_ENDPOINT,
     REVOCATION_ENDPOINT,
     JWKS_ENDPOINT,
@@ -66,7 +68,7 @@ const makeDPoP = function (): string {
         },
         payload: {
             htm: 'POST',
-            htu: `http://localhost:3000${TOKEN_ENDPOINT}`,
+            htu: `http://localhost:3000${API_ROOT}${TOKEN_ENDPOINT}`,
             jti: randomUUID(),
             iat: Math.floor(Date.now() / 1000),
         },
@@ -92,7 +94,7 @@ describe('Refresh Token', () => {
         api(app);
         response = await app.inject({
             method: 'POST',
-            url: '/token',
+            url: API_ROOT + TOKEN_ENDPOINT,
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded',
               },
@@ -149,15 +151,8 @@ describe('Refresh Token', () => {
     it ('should accept a login trigger', async () => {
         const user: Record<string, any> = TEST_USER;
         user.nonce = nonce;
-        const response = await app.inject({
-            method: 'POST',
-            url: LOGIN_ENDPOINT,
-            headers: {
-                'Content-Type': 'application/json',
-              },
-            payload: JSON.stringify(user)
-        });
-        assert.strictEqual(response.statusCode, 202, 'Status code is not 202');
+        const response = await loginTrigger({payload: user} as unknown as LoginTriggerParams);
+        assert.strictEqual(Object.keys(response).length, 0, 'Response is not an empty object');
     })
 
     it ('should return an access_token and refresh_token', async () => {
@@ -170,7 +165,7 @@ describe('Refresh Token', () => {
         }
         const response = await app.inject({
             method: 'POST',
-            url: '/token',
+            url: API_ROOT + TOKEN_ENDPOINT,
             headers,
             payload: `grant_type=authorization_code&client_id=${SDK_CLIENT_ID}&code=${nonce}`  
         });
@@ -227,7 +222,7 @@ describe('Refresh Token', () => {
         }
         const response = await app.inject({
             method: 'POST',
-            url: '/token',
+            url: API_ROOT + TOKEN_ENDPOINT,
             headers,
             payload: `grant_type=refresh_token&client_id=${SDK_CLIENT_ID}&refresh_token=${refresh_token}`  
         });
@@ -277,7 +272,7 @@ describe('Refresh Token', () => {
         }
         const response = await app.inject({
             method: 'POST',
-            url: INTROSPECTION_ENDPOINT,
+            url: API_ROOT + INTROSPECTION_ENDPOINT,
             headers,
             payload: `token=${access_token}`  
         });

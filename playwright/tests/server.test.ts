@@ -1,10 +1,10 @@
 
 
-const MOCKIN = 'http://localhost:3333'
+const MOCKIN = 'http://localhost:3333/'
 const CLIENT_HOME = 'http://localhost:8000'
-const CLIENT_API = CLIENT_HOME+'/api/hellocoop'
+const CLIENT_API = CLIENT_HOME+'/api/auth'
 
-const AS_HOME = 'http://localhost:3000'
+const AS_HOME = 'http://localhost:3000/api/auth'
 
 import { test, expect } from '@playwright/test';
 

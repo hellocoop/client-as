@@ -1,5 +1,6 @@
 // constants
 
+export const API_ROOT = '/api/auth'
 export const TOKEN_ENDPOINT = '/token'
 export const REVOCATION_ENDPOINT = '/revoke'
 export const JWKS_ENDPOINT = '/jwks'

@@ -10,7 +10,7 @@
     "start": "node dist/index.js",
     "build": "rimraf dist && tsc -p tsconfig.prod.json",
     "playwright": "npm run build && docker-compose -f docker-compose.playwright.yml up --build",
-    "test": "mocha -r ts-node/register tests/*.spec.ts && SUPPRESS_DPOP_CHECK=true mocha -r ts-node/register tests/refresh-token.spec.ts"
+    "test": "CLIENT_ID=test COOKIE_SECRET=9e464d6f34cca8bec64d370770ab1fd151ded85fe8a0f5a7dbd00f11675a9db7 mocha -r ts-node/register tests/*.spec.ts && SUPPRESS_DPOP_CHECK=true CLIENT_ID=test COOKIE_SECRET=9e464d6f34cca8bec64d370770ab1fd151ded85fe8a0f5a7dbd00f11675a9db7 mocha -r ts-node/register tests/refresh-token.spec.ts"
   },
   "author": "",
   "license": "ISC",
@@ -29,6 +29,7 @@
   },
   "dependencies": {
     "@fastify/formbody": "^7.4.0",
+    "@hellocoop/fastify": "^1.9.5",
     "cookie": "^0.6.0",
     "fastify": "^4.26.2",
     "ioredis": "^5.3.2",

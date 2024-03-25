@@ -1,16 +1,18 @@
 // server
 
-import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import fastify, { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import formbody from '@fastify/formbody';
 import jws, { Algorithm, Header } from 'jws'
 import jwkToPem, { JWK } from 'jwk-to-pem'
 import { randomUUID, createHash } from 'crypto';
 import { serialize as serializeCookie, parse as parseCookies } from 'cookie'
+import { helloAuth, HelloConfig, LoginTriggerParams, LoginTriggerResponse } from '@hellocoop/fastify'
 
 import { PUBLIC_JWKS, PRIVATE_KEY, PUBLIC_KEY } from './jwks'
 import * as state from './state'
 
 import {
+    API_ROOT,
     TOKEN_ENDPOINT,
     REVOCATION_ENDPOINT,
     JWKS_ENDPOINT,
@@ -41,12 +43,27 @@ const HOST = process.env.HOST
 const PORT: number = Number(process.env.PORT) || 3000
 const USE_DPOP: boolean = !process.env.SUPPRESS_DPOP_CHECK
 
-const BASE_URL = (HOST)
-    ? `https://${HOST}`
-    : `http://localhost:${PORT}`
+const ISSUER = (HOST)
+? `https://${HOST}`
+: `http://localhost:${PORT}`
+const BASE_URL = ISSUER + API_ROOT
 const HTU = BASE_URL + TOKEN_ENDPOINT
 
 const PRODUCTION = (process.env.NODE_ENV === 'production')
+
+const { version } = require('../package.json')
+
+const clientId = process.env.CLIENT_ID || process.env.HELLO_CLIENT_ID
+const cookieSecret = process.env.COOKIE_SECRET || process.env.HELLO_COOKIE_SECRET
+
+if (!clientId) {
+    throw new Error('CLIENT_ID or HELLO_CLIENT_ID is required')
+}
+if (!cookieSecret) {
+    throw new Error('COOKIE_SECRET or HELLO_COOKIE_SECRET is required')
+}
+
+
 
 const JWT_HEADER: Header = {
     alg: 'RS256',
@@ -69,7 +86,7 @@ interface MetaData {
     dpop_signing_alg_values_supported?: string[];
 }
 const META_DATA: MetaData = {
-    issuer: BASE_URL,
+    issuer: ISSUER,
     token_endpoint: `${BASE_URL}${TOKEN_ENDPOINT}`,
     jwks_uri: `${BASE_URL}${JWKS_ENDPOINT}`,
     grant_types_supported: [
@@ -208,7 +225,7 @@ const refreshFromCode = async (code: string, client_id: string, jkt: string): Pr
     if (!currentState.loggedIn) {
         throw new TokenError(400, 'code is not logged in')
     }
-    if (currentState.iss !== BASE_URL) {
+    if (currentState.iss !== ISSUER) {
         throw new TokenError(400, 'code invalid issuer')
     }
     const now = Math.floor(Date.now() / 1000)
@@ -224,7 +241,7 @@ const refreshFromCode = async (code: string, client_id: string, jkt: string): Pr
     await state.update(code, currentState)
 
     const payload: Payload = {
-        iss: BASE_URL,
+        iss: ISSUER,
         sub: currentState.sub as string,
         aud: currentState.aud as string,
         client_id,
@@ -297,11 +314,11 @@ const refreshFromSession = async (session_token: string) => {
     if (!currentState.loggedIn) {
         throw new TokenError(400, 'session state is not logged in')
     }
-    if (currentState.iss !== BASE_URL) {
+    if (currentState.iss !== ISSUER) {
         throw new TokenError(400, 'session_token invalid issuer')
     }
     const refreshPayload = {
-        iss: BASE_URL,
+        iss: ISSUER,
         sub: currentState.sub,
         aud: currentState.aud,
         client_id: payload.client_id,
@@ -349,7 +366,7 @@ const makeSessionToken = async (client_id: string): Promise<{session_token: stri
     const nonce = randomUUID()
     const now = Math.floor(Date.now() / 1000)
     const currentState: state.State = {
-        iss: BASE_URL,
+        iss: ISSUER,
         loggedIn: false,
         exp: now + STATE_LIFETIME,
         nonce
@@ -359,7 +376,7 @@ const makeSessionToken = async (client_id: string): Promise<{session_token: stri
         header: JWT_HEADER,
         payload: {
             token_type: 'session_token',
-            iss: BASE_URL,
+            iss: ISSUER,
             iat: now,
             exp: now + STATE_LIFETIME,
             client_id,
@@ -457,42 +474,8 @@ const tokenEndpoint = async (req: FastifyRequest, reply: FastifyReply) => {
     } catch (e) {
         const error = e as TokenError
         console.error(error)
-        reply.code(error.statusCode).send({error: error.message})
+        return reply.code(error.statusCode).send({error: error.message})
     }
-}
-
-const loginEndpoint = async (req: FastifyRequest, reply: FastifyReply) => {
-
-// console.log('loginEndpoint', { body: req.body } )
-
-    const { sub, nonce } = req.body as { sub: string, nonce: string }
-
-    if (!sub) {
-        return reply.code(400).send({error:'invalid_request', error_description:'sub is required'})
-    }
-    if (!nonce) {
-        return reply.code(400).send({error:'invalid_request', error_description:'nonce is required'})
-    }
-    const currentState = await state.read(nonce)
-    if (!currentState) {
-        return reply.code(400).send({error:'invalid_request', error_description:'nonce is invalid'})
-    }
-    if (currentState.loggedIn) {
-        return reply.code(400).send({error:'invalid_request', error_description:'nonce is already logged in'})
-    }
-    const now = Math.floor(Date.now() / 1000)
-    if (currentState.exp < now) {
-        return reply.code(400).send({error:'invalid_request', error_description:'state has expired'})
-    }
-
-    await state.update(nonce, { 
-        iss: BASE_URL,
-        exp: now + STATE_LIFETIME,
-        nonce,
-        loggedIn: true, 
-        sub 
-    })
-    reply.code(202).send({})
 }
 
 const introspectEndpoint = async (req: FastifyRequest, reply: FastifyReply) => {
@@ -518,24 +501,65 @@ const introspectEndpoint = async (req: FastifyRequest, reply: FastifyReply) => {
     if (payload.exp < now) {
         return reply.send({active: false})
     }
-    reply.send({active: true, ...payload})
+    return reply.send({active: true, ...payload})
+}
+
+
+const loginTrigger = async ( params: LoginTriggerParams ): Promise<LoginTriggerResponse> => {
+    const { payload } = params
+    const { nonce, sub } = payload
+    const currentState = await state.read(nonce)    
+    if (!currentState) {
+        console.error({error:'invalid_request', error_description:'nonce is invalid'})
+        return { accessDenied: false }
+    }
+    if (currentState.loggedIn) {
+        console.error({error:'invalid_request', error_description:'nonce is already logged in'})
+        return { accessDenied: false }
+    }
+    const now = Math.floor(Date.now() / 1000)
+    if (currentState.exp < now) {
+        console.error({error:'invalid_request', error_description:'state has expired'})
+        return { accessDenied: false }
+    }
+
+    await state.update(nonce, { 
+        iss: ISSUER,
+        exp: now + STATE_LIFETIME,
+        nonce,
+        loggedIn: true, 
+        sub 
+    })
+    return {}
+}
+
+
+const helloConfig: HelloConfig = {
+    clientId: process.env.CLIENT_ID || process.env.HELLO_CLIENT_ID,
+    cookieSecret: process.env.COOKIE_SECRET || process.env.HELLO_COOKIE_SECRET,
+    loginTrigger: loginTrigger
 }
 
 const api = (app: FastifyInstance) => {
-    app.register(formbody);
-    app.post(LOGIN_ENDPOINT, loginEndpoint)
-    app.post(TOKEN_ENDPOINT, tokenEndpoint)
-    app.post(INTROSPECTION_ENDPOINT, introspectEndpoint)
-    app.get(INTROSPECTION_ENDPOINT, introspectEndpoint)
-    app.post(REVOCATION_ENDPOINT, (req, reply) => {
-        reply.code(501).send('Not Implemented')
-    })
-    app.get(JWKS_ENDPOINT, (req, reply) => {
-        reply.send(PUBLIC_JWKS)
-    })
+    app.register(formbody)
+    app.register(helloAuth, helloConfig)
     app.get('/.well-known/oauth-authorization-server', (req, reply) => {
-        reply.send(META_DATA)
+        return reply.send(META_DATA)
     })
+    app.register( async (fastify) => {
+        fastify.post(TOKEN_ENDPOINT, tokenEndpoint)
+        fastify.post(INTROSPECTION_ENDPOINT, introspectEndpoint)
+        fastify.get(INTROSPECTION_ENDPOINT, introspectEndpoint)
+        fastify.post(REVOCATION_ENDPOINT, (req, reply) => {
+            return reply.code(501).send('Not Implemented')
+        })
+        fastify.get(JWKS_ENDPOINT, (req, reply) => {
+            return reply.send(PUBLIC_JWKS)
+        })    
+        fastify.get("/version", (request, reply) => {
+            return reply.send({version});
+        });
+    }, { prefix: API_ROOT })
 }
 
-export { api, PORT }
+export { api, PORT, loginTrigger } // loginTrigger is exported for testing

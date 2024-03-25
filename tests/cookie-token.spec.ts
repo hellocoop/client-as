@@ -1,9 +1,10 @@
 import assert from 'assert';
 import Fastify, { FastifyInstance, LightMyRequestResponse } from 'fastify';
 import jws from 'jws'
-
-import { api } from '../src/api';
+import { LoginTriggerParams } from '@hellocoop/fastify';
+import { api, loginTrigger } from '../src/api';
 import {
+    API_ROOT,
     TOKEN_ENDPOINT,
     REVOCATION_ENDPOINT,
     JWKS_ENDPOINT,
@@ -49,7 +50,7 @@ describe('Cookie Token', () => {
         api(app);
         response = await app.inject({
             method: 'POST',
-            url: '/token',
+            url: API_ROOT + TOKEN_ENDPOINT,
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded',
                 'x-test': 'test1',
@@ -96,22 +97,14 @@ describe('Cookie Token', () => {
     it ('should accept a login trigger', async () => {
         const user: Record<string, any> = TEST_USER;
         user.nonce = nonce;
-        const response = await app.inject({
-            method: 'POST',
-            url: LOGIN_ENDPOINT,
-            headers: {
-                'Content-Type': 'application/json',
-                'x-test': 'test2',
-              },
-            payload: JSON.stringify(user)
-        });
-        assert.strictEqual(response.statusCode, 202, 'Status code is not 202');
+        const response = await loginTrigger({payload: user} as unknown as LoginTriggerParams);
+        assert.strictEqual(Object.keys(response).length, 0, 'Response is not an empty object');
     })
 
     it ('should now have a logged in user and cookie tokens', async () => {
         const response = await app.inject({
             method: 'POST',
-            url: '/token',
+            url: API_ROOT + TOKEN_ENDPOINT,
             headers: {
                 'x-test': 'test3',
                 'Content-Type': 'application/x-www-form-urlencoded',
@@ -166,7 +159,7 @@ describe('Cookie Token', () => {
     it ('should accept a refresh token', async () => {
         const response = await app.inject({
             method: 'POST',
-            url: '/token',
+            url: API_ROOT + TOKEN_ENDPOINT,
             headers: {
                 'x-test': 'test4',
                 'Content-Type': 'application/x-www-form-urlencoded',
