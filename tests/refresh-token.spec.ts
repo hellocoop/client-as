@@ -63,7 +63,7 @@ const makeDPoP = function (): string {
         },
         payload: {
             htm: 'POST',
-            htu: `http://localhost:3000${API_ROOT}${TOKEN_ENDPOINT}`,
+            htu: `http://localhost:3000${TOKEN_ENDPOINT}`,
             jti: randomUUID(),
             iat: Math.floor(Date.now() / 1000),
         },
@@ -267,7 +267,7 @@ describe('Refresh Token', () => {
         }
         const response = await app.inject({
             method: 'POST',
-            url: API_ROOT + INTROSPECTION_ENDPOINT,
+            url: INTROSPECTION_ENDPOINT,
             headers,
             payload: `token=${access_token}`  
         });
