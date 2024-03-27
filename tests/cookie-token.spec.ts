@@ -1,8 +1,8 @@
 import assert from 'assert';
 import Fastify, { FastifyInstance, LightMyRequestResponse } from 'fastify';
 import jws from 'jws'
-import { LoginTriggerParams } from '@hellocoop/fastify';
-import { api, loginTrigger } from '../src/api';
+import { LoginSyncParams } from '@hellocoop/fastify';
+import { api, loginSync } from '../src/api';
 import {
     API_ROOT,
     TOKEN_ENDPOINT,
@@ -93,7 +93,7 @@ describe('Cookie Token', () => {
     it ('should accept a login trigger', async () => {
         const user: Record<string, any> = TEST_USER;
         user.nonce = nonce;
-        const response = await loginTrigger({payload: user} as unknown as LoginTriggerParams);
+        const response = await loginSync({payload: user} as unknown as LoginSyncParams);
         assert.strictEqual(Object.keys(response).length, 0, 'Response is not an empty object');
     })
 

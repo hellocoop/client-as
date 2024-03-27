@@ -6,7 +6,7 @@ import jws, { Algorithm, Header } from 'jws'
 import jwkToPem, { JWK } from 'jwk-to-pem'
 import { randomUUID, createHash } from 'crypto';
 import { serialize as serializeCookie, parse as parseCookies } from 'cookie'
-import { helloAuth, HelloConfig, LoginTriggerParams, LoginTriggerResponse } from '@hellocoop/fastify'
+import { helloAuth, HelloConfig, LoginSyncParams, LoginSyncResponse } from '@hellocoop/fastify'
 
 import { PUBLIC_JWKS, PRIVATE_KEY, PUBLIC_KEY } from './jwks'
 import * as state from './state'
@@ -510,9 +510,9 @@ const introspectEndpoint = async (req: FastifyRequest, reply: FastifyReply) => {
 }
 
 
-const loginTrigger = async ( params: LoginTriggerParams ): Promise<LoginTriggerResponse> => {
+const loginSync = async ( params: LoginSyncParams ): Promise<LoginSyncResponse> => {
 
-// console.log('api.ts loginTrigger', {params})
+// console.log('api.ts loginSync', {params})
 
 // debugger;
 
@@ -549,7 +549,7 @@ const helloConfig: HelloConfig = {
     cookieSecret: process.env.COOKIE_SECRET || process.env.HELLO_COOKIE_SECRET,
     logConfig: true,
     apiRoute: AUTH_ROUTE,
-    loginTrigger,
+    loginSync,
 }
 
 // console.log('api.js', {helloConfig})
@@ -579,4 +579,4 @@ const api = (app: FastifyInstance) => {
     });
 }
 
-export { api, PORT, loginTrigger } // loginTrigger is exported for testing
+export { api, PORT, loginSync } // loginSync is exported for testing
