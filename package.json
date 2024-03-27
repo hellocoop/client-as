@@ -9,6 +9,7 @@
   "scripts": {
     "start": "node dist/index.js",
     "build": "rimraf dist && tsc -p tsconfig.prod.json",
+    "release": "./scripts/release.sh",
     "playwright": "npm run build && docker-compose -f docker-compose.playwright.yml up --build",
     "test": "CLIENT_ID=test COOKIE_SECRET=9e464d6f34cca8bec64d370770ab1fd151ded85fe8a0f5a7dbd00f11675a9db7 mocha -r ts-node/register tests/*.spec.ts && SUPPRESS_DPOP_CHECK=true CLIENT_ID=test COOKIE_SECRET=9e464d6f34cca8bec64d370770ab1fd151ded85fe8a0f5a7dbd00f11675a9db7 mocha -r ts-node/register tests/refresh-token.spec.ts"
   },
