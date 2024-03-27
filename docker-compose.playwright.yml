@@ -14,7 +14,6 @@ services:
     ports:
       - '6379:6379'
 
-
   as:
     image: as 
     build:
@@ -27,6 +26,13 @@ services:
       - '9229:9229'
     environment:
       REDIS_URL: redis://redis:6379
+      HELLO_WALLET: 'http://wallet.hello-dev.net:3333'
+      COOKIE_SECRET: '66c71f55568f7b0c3b30cb6a8df9975b5125000caa775240b2e76eb96c43715e'
+      CLIENT_ID: 'hello-docker-test-client'
+      HELLO_API_ROUTE: '/api/auth'
+    extra_hosts:
+      - "wallet.hello-dev.net:host-gateway"
+    # command: npm run debug
 
   mockin:
     image: hellocoop/mockin:latest
@@ -38,39 +44,3 @@ services:
       - '9339:9229'
     environment:
       ISSUER: 'http://wallet.hello-dev.net:3333'
-
-  # client:
-  #   image: hellocoop/client
-  #   networks: 
-  #     - test
-  #   ports:
-  #     - '8000:8000'
-  #     # debugger
-  #     - '9449:9229'    
-  #   environment:
-  #     HELLO_WALLET: 'http://wallet.hello-dev.net:3333'
-  #     HELLO_COOKIE_SECRET: '66c71f55568f7b0c3b30cb6a8df9975b5125000caa775240b2e76eb96c43715e'
-  #     HELLO_CLIENT_ID: 'hello-docker-test-client'
-  #   extra_hosts:
-  #     - "wallet.hello-dev.net:host-gateway"
-
-
-  client:
-    image: client
-    build: 
-      context: ../docker-client
-    networks: 
-      - test
-    ports:
-      - '8000:8000'
-      # debugger
-      - '9449:9229'    
-    environment:
-      HELLO_WALLET: 'http://wallet.hello-dev.net:3333'
-      HELLO_COOKIE_SECRET: '66c71f55568f7b0c3b30cb6a8df9975b5125000caa775240b2e76eb96c43715e'
-      HELLO_CLIENT_ID: 'hello-docker-test-client'
-      LOGIN_TRIGGER_URL: 'http://wallet.hello-dev.net:3000/login'
-    extra_hosts:
-      - "wallet.hello-dev.net:host-gateway"
-    # command: npm run debug
-

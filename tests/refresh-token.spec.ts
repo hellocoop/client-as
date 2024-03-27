@@ -94,7 +94,7 @@ describe('Refresh Token', () => {
         api(app);
         response = await app.inject({
             method: 'POST',
-            url: API_ROOT + TOKEN_ENDPOINT,
+            url: TOKEN_ENDPOINT,
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded',
               },
@@ -165,7 +165,7 @@ describe('Refresh Token', () => {
         }
         const response = await app.inject({
             method: 'POST',
-            url: API_ROOT + TOKEN_ENDPOINT,
+            url: TOKEN_ENDPOINT,
             headers,
             payload: `grant_type=authorization_code&client_id=${SDK_CLIENT_ID}&code=${nonce}`  
         });
@@ -222,7 +222,7 @@ describe('Refresh Token', () => {
         }
         const response = await app.inject({
             method: 'POST',
-            url: API_ROOT + TOKEN_ENDPOINT,
+            url: TOKEN_ENDPOINT,
             headers,
             payload: `grant_type=refresh_token&client_id=${SDK_CLIENT_ID}&refresh_token=${refresh_token}`  
         });

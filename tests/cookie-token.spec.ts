@@ -6,9 +6,7 @@ import { api, loginTrigger } from '../src/api';
 import {
     API_ROOT,
     TOKEN_ENDPOINT,
-    REVOCATION_ENDPOINT,
     JWKS_ENDPOINT,
-    LOGIN_ENDPOINT,
     ACCESS_LIFETIME,
     STATE_LIFETIME,
     REFRESH_LIFETIME,
@@ -50,7 +48,7 @@ describe('Cookie Token', () => {
         api(app);
         response = await app.inject({
             method: 'POST',
-            url: API_ROOT + TOKEN_ENDPOINT,
+            url: TOKEN_ENDPOINT,
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded',
                 'x-test': 'test1',
@@ -77,7 +75,7 @@ describe('Cookie Token', () => {
         assert.strictEqual(sessionCookie.sameSite, 'Strict', 'session_token cookie sameSite is not Strict');
         assert(sessionCookie.maxAge, 'session_token cookie does not have maxAge');
         assert.strictEqual(sessionCookie.maxAge, STATE_LIFETIME, `session_token cookie maxAge is not ${STATE_LIFETIME}`);
-        assert.strictEqual(sessionCookie.path, TOKEN_ENDPOINT, `session_token cookie path is not ${TOKEN_ENDPOINT}`);
+        assert.strictEqual(sessionCookie.path, TOKEN_ENDPOINT, `session_token cookie path is ${TOKEN_ENDPOINT}`);
         session_token = sessionCookie.value;
         assert(session_token, 'session_token cookie value does not exist');
         const { header, payload } = jws.decode(session_token, { json: true });
@@ -104,7 +102,7 @@ describe('Cookie Token', () => {
     it ('should now have a logged in user and cookie tokens', async () => {
         const response = await app.inject({
             method: 'POST',
-            url: API_ROOT + TOKEN_ENDPOINT,
+            url: TOKEN_ENDPOINT,
             headers: {
                 'x-test': 'test3',
                 'Content-Type': 'application/x-www-form-urlencoded',
@@ -126,7 +124,7 @@ describe('Cookie Token', () => {
         assert.strictEqual(accessCookie.sameSite, 'Strict', 'access_token cookie sameSite is not Strict');
         assert(accessCookie.maxAge, 'access_token cookie does not have maxAge');
         assert.strictEqual(accessCookie.maxAge, ACCESS_LIFETIME, `access_token cookie maxAge is not ${ACCESS_LIFETIME}`);
-        assert.strictEqual(accessCookie.path, '/', 'access_token cookie path is not /');
+        assert.strictEqual(accessCookie.path, API_ROOT, `access_token cookie path is not ${API_ROOT}`);
         assert(refreshCookie.httpOnly, 'refresh_token cookie is not httpOnly');
         assert(refreshCookie.sameSite, 'refresh_token cookie does not have sameSite');
         assert.strictEqual(refreshCookie.sameSite, 'Strict', 'refresh_token cookie sameSite is not Strict');
@@ -159,7 +157,7 @@ describe('Cookie Token', () => {
     it ('should accept a refresh token', async () => {
         const response = await app.inject({
             method: 'POST',
-            url: API_ROOT + TOKEN_ENDPOINT,
+            url: TOKEN_ENDPOINT,
             headers: {
                 'x-test': 'test4',
                 'Content-Type': 'application/x-www-form-urlencoded',
@@ -185,7 +183,7 @@ describe('Cookie Token', () => {
         assert.strictEqual(accessCookie.sameSite, 'Strict', 'access_token cookie sameSite is not Strict');
         assert(accessCookie.maxAge, 'access_token cookie does not have maxAge');
         assert.strictEqual(accessCookie.maxAge, ACCESS_LIFETIME, `access_token cookie maxAge is not ${ACCESS_LIFETIME}`);
-        assert.strictEqual(accessCookie.path, '/', 'access_token cookie path is not /');
+        assert.strictEqual(accessCookie.path, API_ROOT, `access_token cookie path is not ${API_ROOT}`);
 
         assert(cookies['refresh_token'], 'refresh_token cookie does not exist');
         const refreshCookie = cookies['refresh_token'];

@@ -8,4 +8,4 @@ RUN npm i --only=production
 # default client port
 EXPOSE 3000
 ENV IP=0.0.0.0
-CMD ["node", "dist/server.js"]
+CMD ["npm","run", "start"]
