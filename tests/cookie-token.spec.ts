@@ -1,3 +1,7 @@
+// test the cookie_token flow
+
+import * as dotenv from 'dotenv';
+dotenv.config({ path: 'tests/.env' }); // Adjust the path as necessary
 import assert from 'assert';
 import Fastify, { FastifyInstance, LightMyRequestResponse } from 'fastify';
 import jws from 'jws'

@@ -1,3 +1,7 @@
+// test refreshing tokens
+
+import * as dotenv from 'dotenv';
+dotenv.config({ path: 'tests/.env' }); // Adjust the path as necessary
 import assert from 'assert';
 import Fastify, { FastifyInstance, LightMyRequestResponse } from 'fastify';
 import jws from 'jws'
@@ -17,7 +21,7 @@ import {
 
 import { TEST_USER } from './user';
 
-const USE_DPOP: boolean = !process.env.SUPPRESS_DPOP_CHECK
+const USE_DPOP: boolean = !!process.env.OAUTH_DPOP
 
 const SDK_CLIENT_ID = 'sdk-1.0.0'
 

@@ -41,7 +41,7 @@ interface Payload {
 
 const HOST = process.env.HOST
 const PORT: number = Number(process.env.PORT) || 3000
-const USE_DPOP: boolean = !process.env.SUPPRESS_DPOP_CHECK
+const USE_DPOP: boolean = !!process.env.OAUTH_DPOP
 
 const ISSUER = (HOST)
 ? `https://${HOST}`

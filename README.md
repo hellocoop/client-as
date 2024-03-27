@@ -19,9 +19,9 @@ hostname to be used in issuer ('iss' claim in access_token) -- will be `https:${
 tbd
 
 
-### SUPPRESS_DPOP_CHECK
+### USE_DPOP
 - default is `undefined`
-set to any value to disable checking for DPoP header and returns `"token_type":"Bearer"` rather than `"token_type":"DPoP"` from token endpoint
+set to any value to enable checking for DPoP header and returns `"token_type":"DPoP"` rather than `"token_type":"Bearer"` from token endpoint
 
 ## Webview 
 ```
