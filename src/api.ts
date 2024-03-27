@@ -1,6 +1,6 @@
 // server
 
-import fastify, { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import formbody from '@fastify/formbody';
 import jws, { Algorithm, Header } from 'jws'
 import jwkToPem, { JWK } from 'jwk-to-pem'
@@ -13,10 +13,10 @@ import * as state from './state'
 
 import {
     API_ROOT,
+    AUTH_ROUTE,
     TOKEN_ENDPOINT,
     REVOCATION_ENDPOINT,
     JWKS_ENDPOINT,
-    LOGIN_ENDPOINT,
     INTROSPECTION_ENDPOINT,
     ACCESS_LIFETIME,
     STATE_LIFETIME,
@@ -46,8 +46,7 @@ const USE_DPOP: boolean = !process.env.SUPPRESS_DPOP_CHECK
 const ISSUER = (HOST)
 ? `https://${HOST}`
 : `http://localhost:${PORT}`
-const BASE_URL = ISSUER + API_ROOT
-const HTU = BASE_URL + TOKEN_ENDPOINT
+const HTU = ISSUER + TOKEN_ENDPOINT
 
 const PRODUCTION = (process.env.NODE_ENV === 'production')
 
@@ -87,15 +86,15 @@ interface MetaData {
 }
 const META_DATA: MetaData = {
     issuer: ISSUER,
-    token_endpoint: `${BASE_URL}${TOKEN_ENDPOINT}`,
-    jwks_uri: `${BASE_URL}${JWKS_ENDPOINT}`,
+    token_endpoint: TOKEN_ENDPOINT,
+    jwks_uri: JWKS_ENDPOINT,
     grant_types_supported: [
         'authorization_code', 
         'client_credentials', 
         'refresh_token',
         'cookie_token', // non-standard
     ],
-    revocation_endpoint: `${BASE_URL}${REVOCATION_ENDPOINT}`,   
+    revocation_endpoint: REVOCATION_ENDPOINT,   
 }
 if (USE_DPOP) {
     META_DATA.dpop_signing_alg_values_supported = ['RS256']
@@ -126,7 +125,7 @@ const setTokenCookies = (reply: FastifyReply, access_token: string, refresh_toke
     const accessTokenCookie = serializeCookie('access_token', access_token || '', {
         maxAge: access_token ? ACCESS_LIFETIME : 0,
         httpOnly: true,
-        path: '/',
+        path: API_ROOT,
         secure: PRODUCTION,
         sameSite: 'strict',
     })
@@ -449,6 +448,12 @@ const tokenEndpoint = async (req: FastifyRequest, reply: FastifyReply) => {
             if (!session_token && !refresh_token) {
                 // no existing session
                 const { session_token, nonce } = await makeSessionToken(client_id)
+                if (!session_token) {
+                    return reply.code(500).send({error:'server_error: session_token not created'})
+                }
+                if (!nonce) {
+                    return reply.code(500).send({error:'server_error: nonce not created'})
+                }
                 setSessionCookie(reply, session_token )
                 return reply.send({
                     loggedIn: false,
@@ -473,8 +478,8 @@ const tokenEndpoint = async (req: FastifyRequest, reply: FastifyReply) => {
         reply.code(400).send({error:'unsupported_grant_type'})
     } catch (e) {
         const error = e as TokenError
-        console.error(error)
-        return reply.code(error.statusCode).send({error: error.message})
+        console.error('token endpoint fault',error)
+        return reply.code(error.statusCode || 500).send({error: 'token parsing'})
     }
 }
 
@@ -506,6 +511,11 @@ const introspectEndpoint = async (req: FastifyRequest, reply: FastifyReply) => {
 
 
 const loginTrigger = async ( params: LoginTriggerParams ): Promise<LoginTriggerResponse> => {
+
+// console.log('api.ts loginTrigger', {params})
+
+// debugger;
+
     const { payload } = params
     const { nonce, sub } = payload
     const currentState = await state.read(nonce)    
@@ -537,8 +547,12 @@ const loginTrigger = async ( params: LoginTriggerParams ): Promise<LoginTriggerR
 const helloConfig: HelloConfig = {
     clientId: process.env.CLIENT_ID || process.env.HELLO_CLIENT_ID,
     cookieSecret: process.env.COOKIE_SECRET || process.env.HELLO_COOKIE_SECRET,
-    loginTrigger: loginTrigger
+    logConfig: true,
+    apiRoute: AUTH_ROUTE,
+    loginTrigger,
 }
+
+// console.log('api.js', {helloConfig})
 
 const api = (app: FastifyInstance) => {
     app.register(formbody)
@@ -546,20 +560,23 @@ const api = (app: FastifyInstance) => {
     app.get('/.well-known/oauth-authorization-server', (req, reply) => {
         return reply.send(META_DATA)
     })
-    app.register( async (fastify) => {
-        fastify.post(TOKEN_ENDPOINT, tokenEndpoint)
-        fastify.post(INTROSPECTION_ENDPOINT, introspectEndpoint)
-        fastify.get(INTROSPECTION_ENDPOINT, introspectEndpoint)
-        fastify.post(REVOCATION_ENDPOINT, (req, reply) => {
-            return reply.code(501).send('Not Implemented')
-        })
-        fastify.get(JWKS_ENDPOINT, (req, reply) => {
-            return reply.send(PUBLIC_JWKS)
-        })    
-        fastify.get("/version", (request, reply) => {
-            return reply.send({version});
-        });
-    }, { prefix: API_ROOT })
+    app.get('/', async (req, reply) => { // for dev and test
+        const auth = await req.getAuth()
+        console.log('auth', auth)
+        return reply.send(auth)
+    })
+    app.post(TOKEN_ENDPOINT, tokenEndpoint)
+    app.post(INTROSPECTION_ENDPOINT, introspectEndpoint)
+    app.get(INTROSPECTION_ENDPOINT, introspectEndpoint)
+    app.post(REVOCATION_ENDPOINT, (req, reply) => {
+        return reply.code(501).send('Not Implemented')
+    })
+    app.get(JWKS_ENDPOINT, (req, reply) => {
+        return reply.send(PUBLIC_JWKS)
+    })    
+    app.get(AUTH_ROUTE+"/version", (request, reply) => {
+        return reply.send({version});
+    });
 }
 
 export { api, PORT, loginTrigger } // loginTrigger is exported for testing
