@@ -1,6 +1,6 @@
 {
   "name": "client-as",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Hellō Client and Authorization Server",
   "main": "server.js",
   "directories": {
