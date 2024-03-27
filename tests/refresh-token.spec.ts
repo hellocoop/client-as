@@ -10,14 +10,9 @@ import { api, loginTrigger } from '../src/api';
 import {
     API_ROOT,
     TOKEN_ENDPOINT,
-    REVOCATION_ENDPOINT,
-    JWKS_ENDPOINT,
-    LOGIN_ENDPOINT,
     INTROSPECTION_ENDPOINT,
     ACCESS_LIFETIME,
-    STATE_LIFETIME,
     REFRESH_LIFETIME,
-    DPOP_LIFETIME
 } from '../src/constants'
 
 import { TEST_USER } from './user';

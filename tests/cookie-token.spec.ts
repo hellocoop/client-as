@@ -6,11 +6,9 @@ import { api, loginTrigger } from '../src/api';
 import {
     API_ROOT,
     TOKEN_ENDPOINT,
-    JWKS_ENDPOINT,
     ACCESS_LIFETIME,
     STATE_LIFETIME,
     REFRESH_LIFETIME,
-    DPOP_LIFETIME
 } from '../src/constants'
 
 import { PUBLIC_KEY } from '../src/jwks';
