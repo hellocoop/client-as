@@ -29,7 +29,7 @@ services:
       HELLO_WALLET: 'http://wallet.hello-dev.net:3333'
       COOKIE_SECRET: '66c71f55568f7b0c3b30cb6a8df9975b5125000caa775240b2e76eb96c43715e'
       CLIENT_ID: 'hello-docker-test-client'
-      HELLO_API_ROUTE: '/api/auth'
+      LOGIN_SYNC_URL: 'http://sync:8888/sync'
     extra_hosts:
       - "wallet.hello-dev.net:host-gateway"
     # command: npm run debug
@@ -44,3 +44,13 @@ services:
       - '9339:9229'
     environment:
       ISSUER: 'http://wallet.hello-dev.net:3333'
+
+  sync:
+    image: sync
+    build:
+      context: ./playwright/sync
+    networks:
+      - test
+    ports:
+      - '8888:8888'
+ 

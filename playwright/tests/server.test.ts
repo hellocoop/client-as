@@ -18,8 +18,6 @@ const loggedIn = {
     email_verified:true
 }
 
-
-
 /* 
 * used for debugging
 *
@@ -60,7 +58,6 @@ test.describe(`Testing Client`, () => {
         // TBD - figure out why so we can test webkit
         await page.goto(CLIENT_API+'?op=login')
         const body = await page.textContent('body');
-
         try {
             const json = JSON.parse(body as string);
             delete json.iat

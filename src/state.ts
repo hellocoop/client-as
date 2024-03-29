@@ -11,9 +11,9 @@ if (process.env.REDIS_URL) {
 
 type State = {
   loggedIn: boolean,
-  nonce: string,
-  exp: number,
-  iss: string,
+  nonce?: string,
+  exp?: number,
+  iss?: string,
   aud?: string,
   sub?: string,
   code_used?: number

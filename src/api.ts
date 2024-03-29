@@ -228,7 +228,7 @@ const refreshFromCode = async (code: string, client_id: string, jkt: string): Pr
         throw new TokenError(400, 'code invalid issuer')
     }
     const now = Math.floor(Date.now() / 1000)
-    if (currentState.exp < now) {
+    if (currentState.exp !== undefined && currentState.exp < now) {
         throw new TokenError(400, 'code is expired')
     }
     // check one time use of code
@@ -509,30 +509,56 @@ const introspectEndpoint = async (req: FastifyRequest, reply: FastifyReply) => {
     return reply.send({active: true, ...payload})
 }
 
+let loginSyncUrl = process.env.LOGIN_SYNC_URL
+
+const logoutUser = async (nonce: string) => {
+    const result = await state.update(nonce, {
+        loggedIn: false,
+    })
+}
 
 const loginSync = async ( params: LoginSyncParams ): Promise<LoginSyncResponse> => {
-
-// console.log('api.ts loginSync', {params})
-
-// debugger;
-
-    const { payload } = params
+    const { payload, token } = params
     const { nonce, sub } = payload
+
+    if (loginSyncUrl) { // see if user is allowed to login
+        const response = await fetch(loginSyncUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ payload, token })
+        })
+
+        if (response.status != 200) {
+                await logoutUser(nonce)
+                return { accessDenied: true }
+        }
+        if (response.status === 200) {
+            const json = await response.json()
+            if (json?.accessDenied) {
+                return { accessDenied: true}
+            }
+            // fall through to update state as access is granted
+        }
+    }
+
+    const now = Math.floor(Date.now() / 1000)
     const currentState = await state.read(nonce)    
     if (!currentState) {
         console.error({error:'invalid_request', error_description:'nonce is invalid'})
-        return { accessDenied: false }
+        return {}
     }
     if (currentState.loggedIn) {
         console.error({error:'invalid_request', error_description:'nonce is already logged in'})
-        return { accessDenied: false }
+        return {}
     }
-    const now = Math.floor(Date.now() / 1000)
-    if (currentState.exp < now) {
+    if ((currentState.exp ?? 0) < now) {
         console.error({error:'invalid_request', error_description:'state has expired'})
-        return { accessDenied: false }
+        return {}
     }
 
+    // we have a valid state to change to sync login across channels
     await state.update(nonce, { 
         iss: ISSUER,
         exp: now + STATE_LIFETIME,
@@ -540,6 +566,8 @@ const loginSync = async ( params: LoginSyncParams ): Promise<LoginSyncResponse> 
         loggedIn: true, 
         sub 
     })
+        
+
     return {}
 }
 
@@ -562,7 +590,7 @@ const api = (app: FastifyInstance) => {
     })
     app.get('/', async (req, reply) => { // for dev and test
         const auth = await req.getAuth()
-        console.log('auth', auth)
+        console.log('GET /', auth)
         return reply.send(auth)
     })
     app.post(TOKEN_ENDPOINT, tokenEndpoint)
