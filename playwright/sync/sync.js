@@ -1,6 +1,5 @@
-const { type } = require('os');
 
-const fastify = require('fastify')({ logger: true });
+const fastify = require('fastify')({ logger: false });
 
 let lastSyncValue = null;
 const defaultMockValues = { code: 200, response: {} };
@@ -23,10 +22,6 @@ fastify.delete('/sync', async (request, reply) => {
 
 // POST /sync
 fastify.post('/sync', async (request, reply) => {
-
-// console.log('/sync request.body\n',JSON.stringify(request.body,null,4))
-
-
     if (isDefaultMockValues()) {
         lastSyncValue = request.body
         return reply.code(200).send({});
@@ -47,12 +42,6 @@ fastify.post('/mock', async (request, reply) => {
   }
   if (typeof code !== 'number') {
     return reply.code(400).send({ message: 'code must be a number' })
-  }
-  if (!response) {
-    return reply.code(400).send({ message: 'response required' })
-  }
-  if (typeof response !== 'object') {
-    return reply.code(400).send({ message: 'response must be an object' })
   }
   mockValues = { code, response };
   return mockValues;

@@ -5,6 +5,8 @@ import {
 } from '../../src/constants'
 const ISSUER = 'http://localhost:3000'
 const CLIENT_API = ISSUER + AUTH_ROUTE
+const MOCK_API = 'http://localhost:3333/mock'
+const SYNC_MOCK_API = 'http://localhost:8888/mock'
 
 import { test, expect } from '@playwright/test';
 
@@ -39,7 +41,7 @@ const trace = (page) => {
 }
 */
 
-test.describe(`Testing Client`, () => {
+test.describe('Testing Client', () => {
 
     test.beforeEach(async ({ page }) => {        
         await page.goto(CLIENT_API+'?op=logout')
@@ -54,8 +56,6 @@ test.describe(`Testing Client`, () => {
         expect(json).toEqual(loggedOut)
     })
     test('login', async ({ page, context }) => {
-        // this request fails in webkit -- and cookies are not set
-        // TBD - figure out why so we can test webkit
         await page.goto(CLIENT_API+'?op=login')
         const body = await page.textContent('body');
         try {
@@ -84,7 +84,7 @@ test.describe(`Testing Client`, () => {
 
 });
 
-test.describe(`Testing Authorization Server`, () => {
+test.describe('Testing Authorization Server', () => {
 
     test.beforeEach(async ({ page }) => {        
         await page.goto(CLIENT_API+'?op=logout')
@@ -105,8 +105,6 @@ test.describe(`Testing Authorization Server`, () => {
         expect(jsonAS.loggedIn).toBe(false)
         const nonce = jsonAS.nonce
         expect(nonce).toBeDefined()
-        // this request fails in webkit -- and cookies are not set
-        // TBD - figure out why so we can test webkit
         const query = new URLSearchParams({op: 'login', nonce, target_uri: CLIENT_API+'?op=auth'})
         await page.goto(CLIENT_API+'?'+query.toString())
         const body = await page.textContent('body');
@@ -134,6 +132,107 @@ test.describe(`Testing Authorization Server`, () => {
         const { sub, iss } = jsonAS3
         expect(sub).toEqual(loggedIn.sub)
         expect(iss).toEqual(ISSUER)
+    })
+
+});
+
+test.describe('Testing Authorization Server Errors', () => {
+
+    test.beforeEach(async ({ page, request }) => {        
+        await page.goto(CLIENT_API+'?op=logout')
+        const response = await page.request.get(CLIENT_API+'?op=auth')
+        const json = await response.json()
+        expect(json).toEqual(loggedOut)
+        const mockResponse = await request.delete(MOCK_API)
+        expect(mockResponse.status()).toBe(200)
+        const syncMockResponse = await request.delete(SYNC_MOCK_API)
+        expect(syncMockResponse.status()).toBe(200)
+    })
+
+    test.afterAll(async ({ request }) => {
+        const mockResponse = await request.delete(MOCK_API)
+        expect(mockResponse.status()).toBe(200)
+        const syncMockResponse = await request.delete(SYNC_MOCK_API)
+        expect(syncMockResponse.status()).toBe(200)
+    })
+
+    test('User cancels login', async ({ page, request, context }) => {
+        const response = await request.post(ISSUER + TOKEN_ENDPOINT, {
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded'
+            },
+            data: 'grant_type=cookie_token&client_id=docker-test'
+        })
+        const jsonAS = await response.json()
+        expect(jsonAS).toBeDefined()
+        expect(jsonAS.loggedIn).toBe(false)
+        const nonce = jsonAS.nonce
+        expect(nonce).toBeDefined()
+
+        const mockResponse = await request.put(MOCK_API+'/authorize?error=access_denied')
+        expect(mockResponse.status()).toBe(200)
+        const query = new URLSearchParams({op: 'login', nonce, target_uri: CLIENT_API+'?op=auth'})
+        await page.goto(CLIENT_API+'?'+query.toString())
+        const finalUrl = page.url();
+        const urlParams = new URLSearchParams(new URL(finalUrl).search);
+        expect(urlParams.get('error')).toBe('access_denied')
+        expect(urlParams.get('op')).toBe('auth')
+        const body = await page.textContent('body');
+        try {
+            const json = JSON.parse(body as string);
+            expect(json).toEqual(loggedOut)
+        }
+        catch (e) {
+            expect(e).toBeNull()
+        }
+    })
+
+    test('User DB sync fails', async ({ page, request, context }) => {
+        const response = await request.post(ISSUER + TOKEN_ENDPOINT, {
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded'
+            },
+            data: 'grant_type=cookie_token&client_id=docker-test'
+        })
+        const jsonAS = await response.json()
+        expect(jsonAS).toBeDefined()
+        expect(jsonAS.loggedIn).toBe(false)
+        const nonce = jsonAS.nonce
+        expect(nonce).toBeDefined()
+
+        const syncMockResponse = await request.post(SYNC_MOCK_API, {
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            data: JSON.stringify({
+                code: 500,
+                response: '{}'
+            })
+        
+        })
+
+        expect(syncMockResponse.status()).toBe(200)
+        const query = new URLSearchParams({op: 'login', nonce, target_uri: CLIENT_API+'?op=auth'})
+        await page.goto(CLIENT_API+'?'+query.toString())
+        const finalUrl = page.url();
+        const urlParams = new URLSearchParams(new URL(finalUrl).search);
+
+
+        urlParams.forEach((value, key) => {
+            console.log(`${key}: ${value}`);
+        });
+
+
+        expect(urlParams.get('error')).toBe('access_denied')
+        expect(urlParams.get('op')).toBe('auth')
+        const body = await page.textContent('body');
+        try {
+            const json = JSON.parse(body as string);
+            expect(json).toEqual(loggedOut)
+        }
+        catch (e) {
+            expect(e).toBeNull()
+        }
     })
 
 });

@@ -529,14 +529,15 @@ const loginSync = async ( params: LoginSyncParams ): Promise<LoginSyncResponse> 
             },
             body: JSON.stringify({ payload, token })
         })
-
         if (response.status != 200) {
+
                 await logoutUser(nonce)
                 return { accessDenied: true }
         }
         if (response.status === 200) {
             const json = await response.json()
             if (json?.accessDenied) {
+                console.log('loginSync - access denied')
                 return { accessDenied: true}
             }
             // fall through to update state as access is granted
@@ -590,7 +591,6 @@ const api = (app: FastifyInstance) => {
     })
     app.get('/', async (req, reply) => { // for dev and test
         const auth = await req.getAuth()
-        console.log('GET /', auth)
         return reply.send(auth)
     })
     app.post(TOKEN_ENDPOINT, tokenEndpoint)
