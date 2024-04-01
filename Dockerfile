@@ -9,3 +9,4 @@ RUN npm i --only=production
 EXPOSE 3000
 ENV IP=0.0.0.0
 CMD ["npm","run", "start"]
+# CMD tail -f /dev/null
