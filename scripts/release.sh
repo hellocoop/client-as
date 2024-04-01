@@ -14,6 +14,20 @@ then
     exit 1
 fi
 
+# Check for Docker Buildx support
+if ! command -v docker buildx &> /dev/null
+then
+    echo "Docker Buildx is not available. Please ensure you have Docker 19.03 or later installed."
+    exit 1
+fi
+
+# Check if Buildx supports multi-platform builds
+BUILDX_CHECK=$(docker buildx inspect --bootstrap)
+if ! echo "$BUILDX_CHECK" | grep "Platforms:" &> /dev/null; then
+    echo "Docker Buildx does not support multi-platform builds. Please configure a Buildx builder with multi-platform support."
+    exit 1
+fi
+
 # Check if the repository is clean (no uncommitted changes)
 if ! git diff-index --quiet HEAD --; then
     echo "The repository has uncommitted changes. Please commit or stash them before proceeding."
