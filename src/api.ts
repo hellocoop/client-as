@@ -10,6 +10,7 @@ import { helloAuth, HelloConfig, LoginSyncParams, LoginSyncResponse } from '@hel
 
 import { PUBLIC_JWKS, PRIVATE_KEY, PUBLIC_KEY } from './jwks'
 import * as state from './state'
+import { clients, Client }  from './clients'
 
 import {
     API_ROOT,
@@ -21,7 +22,9 @@ import {
     ACCESS_LIFETIME,
     STATE_LIFETIME,
     REFRESH_LIFETIME,
-    DPOP_LIFETIME
+    DPOP_LIFETIME,
+    TOKEN_EXCHANGE_LIFETIME,
+    AUDIENCE
 } from './constants'
 
 interface Payload {
@@ -376,6 +379,7 @@ const makeSessionToken = async (client_id: string): Promise<{session_token: stri
         payload: {
             token_type: 'session_token',
             iss: ISSUER,
+            aud: AUDIENCE,
             iat: now,
             exp: now + STATE_LIFETIME,
             client_id,
@@ -386,6 +390,82 @@ const makeSessionToken = async (client_id: string): Promise<{session_token: stri
 
     const session_token = jws.sign(params)
     return { session_token, nonce }
+}
+
+const tokenExchange = async (req: FastifyRequest, reply: FastifyReply) => {
+    const { requested_token_type, subject_token_type, subject_token, } = req.body as { 
+        requested_token_type: string, subject_token_type: string, subject_token: string
+    }
+    if (requested_token_type !== 'urn:ietf:params:oauth:token-type:access_token') {
+        return reply.code(400).send({error:'invalid_request', error_description:'requested_token_type must be urn:ietf:params:oauth:token-type:access_token'})
+    }
+    if (subject_token_type !== 'urn:ietf:params:oauth:token-type:jwt') {
+        return reply.code(400).send({error:'invalid_request', error_description:'subject_token_type must be urn:ietf:params:oauth:token-type:jwt'})
+    }
+    if (!subject_token) {
+        return reply.code(400).send({error:'invalid_request', error_description:'subject_token is required'})
+    }
+    try {
+        const { header, payload } = jws.decode(subject_token, { json: true })
+        const { typ, alg, kid } = header as { typ: string, alg: Algorithm, kid: string }
+        if (typ !== 'jwt') {
+            return reply.code(400).send({error:'invalid_request', error_description:'subject_token "typ" is invalid'})
+        }
+        if (alg !== 'RS256') {
+            return reply.code(400).send({error:'invalid_request', error_description:'subject_token "alg" must be RS256'})
+        }
+        const { iss, aud, sub, iat, token_type } = payload as Payload
+        if (!iss) {
+            return reply.code(400).send({error:'invalid_request', error_description:'subject_token must have "iss" claims'})
+        }
+        if (aud !== ISSUER) {
+            return reply.code(400).send({error:'invalid_request', error_description:'subject_token "aud" must be the Authorization Server'})
+        }
+        if (!sub) {
+            return reply.code(400).send({error:'invalid_request', error_description:'subject_token must have "sub" claims'})
+        }
+        const now = Math.floor(Date.now() / 1000)
+        if (iat + TOKEN_EXCHANGE_LIFETIME < now) {
+            return reply.code(400).send({error:'invalid_request', error_description:'subject_token is expired'})
+        }
+        if (token_type != 'urn:ietf:params:oauth:token-type:jwt') {
+            return reply.code(400).send({error:'invalid_request', error_description:'subject_token "token_type" must be urn:ietf:params:oauth:token-type:jwt'})
+        }
+        const client: Client = clients[iss]
+        if (!client) {
+            return reply.code(401).send({error:'access_denied', error_description:`unknown client '${iss}'`})
+        }
+        const key = client?.keys[kid]
+        if (!key) {
+            return reply.code(401).send({error:'access_denied', error_description:`unknown key '${kid}'for client '${iss}'`})
+        }
+        if (!jws.verify(subject_token, 'RS256', key))
+            return reply.code(401).send({error:'access_denied', error_description:'subject_token is invalid'})
+        const accessPayload: Payload = {
+            iss: ISSUER,
+            sub,
+            aud: AUDIENCE,
+            client_id: iss,
+            token_type: 'access_token',
+            iat: now,
+            exp: now + ACCESS_LIFETIME,
+            jti: randomUUID()
+        }
+        const newAccessToken = jws.sign({
+            header: AT_HEADER,
+            payload: accessPayload,
+            privateKey: PRIVATE_KEY
+        })
+        return reply.send({
+            access_token: newAccessToken,
+            issued_token_type: 'urn:ietf:params:oauth:token-type:access_token',
+            token_type: 'Bearer',
+            expires_in: ACCESS_LIFETIME
+        })
+
+    } catch (e) {
+        return reply.code(400).send({error:'invalid_request', error_description:'subject_token is invalid'})
+    }
 }
 
 const tokenEndpoint = async (req: FastifyRequest, reply: FastifyReply) => {
@@ -470,6 +550,12 @@ const tokenEndpoint = async (req: FastifyRequest, reply: FastifyReply) => {
             return reply.send({
                 loggedIn: true
             })
+        }
+
+        if (grant_type === 'urn:ietf:params:oauth:grant-type:token-exchange') {
+            // token exchange for 1P servers
+            await tokenExchange(req, reply)
+            return
         }
 
         if (grant_type === 'client_credentials') {

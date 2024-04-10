@@ -11,3 +11,6 @@ export const ACCESS_LIFETIME = 5 * 60              // 5 minutes
 export const STATE_LIFETIME = 5 * 60               // 5 minutes
 export const REFRESH_LIFETIME = 30 * 24 * 60 * 60  // 30 days
 export const DPOP_LIFETIME = 60                    // 1 minute for clock skew
+export const TOKEN_EXCHANGE_LIFETIME = 60          // 1 minute for clock skew
+
+export const AUDIENCE = process.env.AUDIENCE || 'https://api.example.com'
