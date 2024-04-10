@@ -101,7 +101,7 @@ if (USE_DPOP) {
 }
 
 
-// console.log('/.well-known/oauth-authorization-server', JSON.stringify(META_DATA, null, 2))
+console.log('/.well-known/oauth-authorization-server', JSON.stringify(META_DATA, null, 2))
 
 class TokenError extends Error {
     statusCode: number; 
@@ -509,7 +509,14 @@ const introspectEndpoint = async (req: FastifyRequest, reply: FastifyReply) => {
     return reply.send({active: true, ...payload})
 }
 
-let loginSyncUrl = process.env.LOGIN_SYNC_URL
+const loginSyncUrl = process.env.LOGIN_SYNC_URL
+
+if (loginSyncUrl) {
+    if (!(loginSyncUrl.startsWith('http://') || loginSyncUrl.startsWith('https://'))) {
+        throw new Error('LOGIN_SYNC_URL must be a valid URL and start with https:// or http://')
+    }
+    console.log('loginSyncUrl', loginSyncUrl)
+}
 
 const logoutUser = async (nonce: string) => {
     const result = await state.update(nonce, {
@@ -530,16 +537,22 @@ const loginSync = async ( params: LoginSyncParams ): Promise<LoginSyncResponse> 
             body: JSON.stringify({ payload, token })
         })
         if (response.status != 200) {
-
+                console.log(`loginSyncUrl ${loginSyncUrl} returned ${response.status} - access denied for sub ${sub}`)
                 await logoutUser(nonce)
                 return { accessDenied: true }
         }
         if (response.status === 200) {
-            const json = await response.json()
-            if (json?.accessDenied) {
-                console.log('loginSync - access denied')
-                return { accessDenied: true}
+            try {
+                const json = await response.json()
+                if (json?.accessDenied) {
+                    console.log('loginSync - access denied for sub', sub)
+                    await logoutUser(nonce)
+                    return { accessDenied: true}
+                }
+            } catch (e) {
+                console.error('loginSync - JSON parsing error', e)
             }
+
             // fall through to update state as access is granted
         }
     }
