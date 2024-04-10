@@ -218,9 +218,9 @@ test.describe('Testing Authorization Server Errors', () => {
         const urlParams = new URLSearchParams(new URL(finalUrl).search);
 
 
-        urlParams.forEach((value, key) => {
-            console.log(`${key}: ${value}`);
-        });
+        // urlParams.forEach((value, key) => {
+        //     console.log(`${key}: ${value}`);
+        // });
 
 
         expect(urlParams.get('error')).toBe('access_denied')
@@ -233,6 +233,108 @@ test.describe('Testing Authorization Server Errors', () => {
         catch (e) {
             expect(e).toBeNull()
         }
+    })
+
+    test('User DB sync denies access', async ({ page, request, context }) => {
+        const response = await request.post(ISSUER + TOKEN_ENDPOINT, {
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded'
+            },
+            data: 'grant_type=cookie_token&client_id=docker-test'
+        })
+        const jsonAS = await response.json()
+        expect(jsonAS).toBeDefined()
+        expect(jsonAS.loggedIn).toBe(false)
+        const nonce = jsonAS.nonce
+        expect(nonce).toBeDefined()
+
+        const syncMockResponse = await request.post(SYNC_MOCK_API, {
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            data: JSON.stringify({
+                code: 200,
+                response: '{"accessDenied":true}'
+            })
+        
+        })
+        expect(syncMockResponse.status()).toBe(200)
+
+        const query = new URLSearchParams({op: 'login', nonce, target_uri: CLIENT_API+'?op=auth'})
+        await page.goto(CLIENT_API+'?'+query.toString())
+        const finalUrl = page.url();
+        const urlParams = new URLSearchParams(new URL(finalUrl).search);
+
+
+        // urlParams.forEach((value, key) => {
+        //     console.log(`${key}: ${value}`);
+        // });
+
+
+        expect(urlParams.get('error')).toBe('access_denied')
+        expect(urlParams.get('op')).toBe('auth')
+        const body = await page.textContent('body');
+        try {
+            const json = JSON.parse(body as string);
+            expect(json).toEqual(loggedOut)
+        }
+        catch (e) {
+            expect(e).toBeNull()
+        }
+    })
+
+
+    test('User DB Sync returns empty response - but login succeeds', async ({ page, request, context }) => {
+        const syncMockResponse = await request.post(SYNC_MOCK_API, {
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            data: JSON.stringify({
+                code: 200,
+                response: ''
+            })
+        
+        })
+        expect(syncMockResponse.status()).toBe(200)
+
+        const response = await request.post(ISSUER + TOKEN_ENDPOINT, {
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded'
+            },
+            data: 'grant_type=cookie_token&client_id=docker-test'
+        })
+        const jsonAS = await response.json()
+        expect(jsonAS).toBeDefined()
+        expect(jsonAS.loggedIn).toBe(false)
+        const nonce = jsonAS.nonce
+        expect(nonce).toBeDefined()
+        const query = new URLSearchParams({op: 'login', nonce, target_uri: CLIENT_API+'?op=auth'})
+        await page.goto(CLIENT_API+'?'+query.toString())
+        const body = await page.textContent('body');
+        try {
+            const json = JSON.parse(body as string);
+            delete json.iat
+            expect(json).toEqual(loggedIn)
+        }
+        catch (e) {
+            expect(e).toBeNull()
+        }
+        const response2 = await request.post(ISSUER + TOKEN_ENDPOINT, {
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded'
+            },
+            data: 'grant_type=cookie_token&client_id=docker-test'
+        })
+        const jsonAS2 = await response2.json()
+        expect(jsonAS2).toBeDefined()
+        expect(jsonAS2.loggedIn).toBe(true)
+
+        const response3 = await request.get(ISSUER + INTROSPECTION_ENDPOINT)
+        const jsonAS3 = await response3.json()
+        expect(jsonAS3).toBeDefined()
+        const { sub, iss } = jsonAS3
+        expect(sub).toEqual(loggedIn.sub)
+        expect(iss).toEqual(ISSUER)
     })
 
 });
