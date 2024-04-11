@@ -540,12 +540,13 @@ const loginSync = async ( params: LoginSyncParams ): Promise<LoginSyncResponse> 
             },
             body: JSON.stringify({ payload, token })
         })
-        if (response.status != 200) {
+        if (!response.ok) {
                 console.log(`loginSyncUrl ${loginSyncUrl} returned ${response.status} - access denied for sub ${sub}`)
                 await logoutUser(nonce)
                 return { accessDenied: true }
         }
-        if (response.status === 200) {
+        // we have a 2xx response
+        if (response.status === 200) { // we have content
             try {
                 const json = await response.json()
                 if (json?.accessDenied) {
@@ -556,9 +557,9 @@ const loginSync = async ( params: LoginSyncParams ): Promise<LoginSyncResponse> 
             } catch (e) {
                 console.error('loginSync - JSON parsing error', e)
             }
-
-            // fall through to update state as access is granted
         }
+
+        // fall through to update state as access is granted
     }
 
     const now = Math.floor(Date.now() / 1000)
