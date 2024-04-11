@@ -528,6 +528,10 @@ const loginSync = async ( params: LoginSyncParams ): Promise<LoginSyncResponse> 
     const { payload, token } = params
     const { nonce, sub } = payload
 
+    if (!PRODUCTION) {
+        console.log('loginSync', {payload, token})
+    }
+
     if (loginSyncUrl) { // see if user is allowed to login
         const response = await fetch(loginSyncUrl, {
             method: 'POST',
@@ -563,6 +567,12 @@ const loginSync = async ( params: LoginSyncParams ): Promise<LoginSyncResponse> 
         console.error({error:'invalid_request', error_description:'nonce is invalid'})
         return {}
     }
+
+    if (!PRODUCTION) {
+        console.log('loginSync', {currentState})
+    }
+    
+
     if (currentState.loggedIn) {
         console.error({error:'invalid_request', error_description:'nonce is already logged in'})
         return {}
