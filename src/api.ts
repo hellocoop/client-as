@@ -49,6 +49,9 @@ const ISSUER = (HOST)
 const HTU = ISSUER + TOKEN_ENDPOINT
 
 const PRODUCTION = (process.env.NODE_ENV === 'production')
+const DEVELOPMENT = (process.env.NODE_ENV === 'development')
+
+const SAME_SITE = (DEVELOPMENT) ? 'none' : 'strict'
 
 const { version } = require('../package.json')
 
@@ -127,7 +130,7 @@ const setTokenCookies = (reply: FastifyReply, access_token: string, refresh_toke
         httpOnly: true,
         path: API_ROOT,
         secure: PRODUCTION,
-        sameSite: 'strict',
+        sameSite: SAME_SITE,
     })
 
     const refreshTokenCookie = serializeCookie('refresh_token', refresh_token || '', {
@@ -135,7 +138,7 @@ const setTokenCookies = (reply: FastifyReply, access_token: string, refresh_toke
         httpOnly: true,
         path: TOKEN_ENDPOINT,
         secure: PRODUCTION,
-        sameSite: 'strict',
+        sameSite: SAME_SITE,
     })
 
     // always clear session_token
@@ -144,7 +147,7 @@ const setTokenCookies = (reply: FastifyReply, access_token: string, refresh_toke
         httpOnly: true,
         path: TOKEN_ENDPOINT,
         secure: PRODUCTION,
-        sameSite: 'strict',
+        sameSite: SAME_SITE,
     })    
 
     reply.header('Set-Cookie', [accessTokenCookie, refreshTokenCookie, sessionTokenCookie]);
@@ -157,7 +160,7 @@ const setSessionCookie = (reply: FastifyReply, session_token: string) => {
         httpOnly: true,
         path: TOKEN_ENDPOINT,
         secure: PRODUCTION,
-        sameSite: 'strict',
+        sameSite: SAME_SITE,
     })
     reply.header('Set-Cookie', sessionTokenCookie);
 }
