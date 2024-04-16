@@ -52,6 +52,7 @@ const PRODUCTION = (process.env.NODE_ENV === 'production')
 const DEVELOPMENT = (process.env.NODE_ENV === 'development')
 
 const SAME_SITE = (DEVELOPMENT) ? 'none' : 'strict'
+const SECURE = PRODUCTION || SAME_SITE === 'none';
 
 const { version } = require('../package.json')
 
@@ -92,12 +93,12 @@ const META_DATA: MetaData = {
     token_endpoint: TOKEN_ENDPOINT,
     jwks_uri: JWKS_ENDPOINT,
     grant_types_supported: [
-        'authorization_code', 
-        'client_credentials', 
+        'authorization_code',
+        'client_credentials',
         'refresh_token',
         'cookie_token', // non-standard
     ],
-    revocation_endpoint: REVOCATION_ENDPOINT,   
+    revocation_endpoint: REVOCATION_ENDPOINT,
 }
 if (USE_DPOP) {
     META_DATA.dpop_signing_alg_values_supported = ['RS256']
@@ -107,8 +108,8 @@ if (USE_DPOP) {
 console.log('/.well-known/oauth-authorization-server', JSON.stringify(META_DATA, null, 2))
 
 class TokenError extends Error {
-    statusCode: number; 
-  
+    statusCode: number;
+
     constructor(statusCode: number, message: string) {
       super(message);
       this.statusCode = statusCode || 500
@@ -129,7 +130,7 @@ const setTokenCookies = (reply: FastifyReply, access_token: string, refresh_toke
         maxAge: access_token ? ACCESS_LIFETIME : 0,
         httpOnly: true,
         path: API_ROOT,
-        secure: PRODUCTION,
+        secure: SECURE,
         sameSite: SAME_SITE,
     })
 
@@ -137,7 +138,7 @@ const setTokenCookies = (reply: FastifyReply, access_token: string, refresh_toke
         maxAge: refresh_token ? REFRESH_LIFETIME : 0,
         httpOnly: true,
         path: TOKEN_ENDPOINT,
-        secure: PRODUCTION,
+        secure: SECURE,
         sameSite: SAME_SITE,
     })
 
@@ -146,9 +147,9 @@ const setTokenCookies = (reply: FastifyReply, access_token: string, refresh_toke
         maxAge: 0,
         httpOnly: true,
         path: TOKEN_ENDPOINT,
-        secure: PRODUCTION,
+        secure: SECURE,
         sameSite: SAME_SITE,
-    })    
+    })
 
     reply.header('Set-Cookie', [accessTokenCookie, refreshTokenCookie, sessionTokenCookie]);
 }
@@ -159,7 +160,7 @@ const setSessionCookie = (reply: FastifyReply, session_token: string) => {
         maxAge: session_token ? STATE_LIFETIME : 0,
         httpOnly: true,
         path: TOKEN_ENDPOINT,
-        secure: PRODUCTION,
+        secure: SECURE,
         sameSite: SAME_SITE,
     })
     reply.header('Set-Cookie', sessionTokenCookie);
@@ -217,7 +218,7 @@ const validateDPoP = (req: FastifyRequest): string => {
         throw new TokenError(400, 'DPoP signature is invalid')
     const jkt = generateThumbprint(jwk)
     return jkt
-}   
+}
 
 const refreshFromCode = async (code: string, client_id: string, jkt: string): Promise<string> => {
     const currentState = await state.read(code)
@@ -239,7 +240,7 @@ const refreshFromCode = async (code: string, client_id: string, jkt: string): Pr
         // future - logout user to revoke issued refresh_token
         throw new TokenError(400, 'code has already been used')
     }
-    currentState.code_used = now 
+    currentState.code_used = now
     await state.update(code, currentState)
 
     const payload: Payload = {
@@ -295,7 +296,7 @@ const refreshFromRefresh = (refresh_token: string): string => {
 }
 
 const refreshFromSession = async (session_token: string) => {
-    // lookup session_token and get payload 
+    // lookup session_token and get payload
     const { header, payload } = jws.decode(session_token, { json: true })
     // TODO -- verify session_token
     if (!header || !payload) {
@@ -346,7 +347,7 @@ const accessFromRefresh = (refresh_token: string): string => {
         throw new TokenError(400, 'refresh_token is invalid')
     }
     const now = Math.floor(Date.now() / 1000)
-    // check if expired 
+    // check if expired
     if (payload.exp < now) {
         throw new TokenError(400, 'refresh_token is expired')
     }
@@ -418,7 +419,7 @@ const tokenEndpoint = async (req: FastifyRequest, reply: FastifyReply) => {
         }
 
         if (grant_type === 'refresh_token') {
-            if (!refresh_token){ 
+            if (!refresh_token){
                 return reply.code(400).send({error:'invalid_request', error_description:'refresh_token is required'})
             }
             const jwt = validateDPoP(req)
@@ -488,7 +489,7 @@ const tokenEndpoint = async (req: FastifyRequest, reply: FastifyReply) => {
 
 const introspectEndpoint = async (req: FastifyRequest, reply: FastifyReply) => {
     let token: string = ''
-    
+
     if (req.method === 'POST') {
         ({ token } = req?.body as { token: string })
     } else if (req.method === 'GET') {
@@ -566,7 +567,7 @@ const loginSync = async ( params: LoginSyncParams ): Promise<LoginSyncResponse> 
     }
 
     const now = Math.floor(Date.now() / 1000)
-    const currentState = await state.read(nonce)    
+    const currentState = await state.read(nonce)
     if (!currentState) {
         console.error({error:'invalid_request', error_description:'nonce is invalid'})
         return {}
@@ -575,7 +576,7 @@ const loginSync = async ( params: LoginSyncParams ): Promise<LoginSyncResponse> 
     if (!PRODUCTION) {
         console.log('loginSync', {currentState})
     }
-    
+
 
     if (currentState.loggedIn) {
         console.error({error:'invalid_request', error_description:'nonce is already logged in'})
@@ -587,14 +588,14 @@ const loginSync = async ( params: LoginSyncParams ): Promise<LoginSyncResponse> 
     }
 
     // we have a valid state to change to sync login across channels
-    await state.update(nonce, { 
+    await state.update(nonce, {
         iss: ISSUER,
         exp: now + STATE_LIFETIME,
         nonce,
-        loggedIn: true, 
-        sub 
+        loggedIn: true,
+        sub
     })
-        
+
 
     return {}
 }
@@ -628,7 +629,7 @@ const api = (app: FastifyInstance) => {
     })
     app.get(JWKS_ENDPOINT, (req, reply) => {
         return reply.send(PUBLIC_JWKS)
-    })    
+    })
     app.get(AUTH_ROUTE+"/version", (request, reply) => {
         return reply.send({version});
     });
