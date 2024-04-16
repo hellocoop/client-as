@@ -76,4 +76,3 @@ try {
 }
 
 export { PRIVATE_KEY, PUBLIC_KEY, PUBLIC_JWKS };
- 
