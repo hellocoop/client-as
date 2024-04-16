@@ -52,6 +52,7 @@ const PRODUCTION = (process.env.NODE_ENV === 'production')
 const DEVELOPMENT = (process.env.NODE_ENV === 'development')
 
 const SAME_SITE = (DEVELOPMENT) ? 'none' : 'strict'
+const SECURE = PRODUCTION || (SAME_SITE === 'none')
 
 const { version } = require('../package.json')
 
@@ -129,7 +130,7 @@ const setTokenCookies = (reply: FastifyReply, access_token: string, refresh_toke
         maxAge: access_token ? ACCESS_LIFETIME : 0,
         httpOnly: true,
         path: API_ROOT,
-        secure: PRODUCTION,
+        secure: SECURE,
         sameSite: SAME_SITE,
     })
 
@@ -137,7 +138,7 @@ const setTokenCookies = (reply: FastifyReply, access_token: string, refresh_toke
         maxAge: refresh_token ? REFRESH_LIFETIME : 0,
         httpOnly: true,
         path: TOKEN_ENDPOINT,
-        secure: PRODUCTION,
+        secure: SECURE,
         sameSite: SAME_SITE,
     })
 
@@ -146,7 +147,7 @@ const setTokenCookies = (reply: FastifyReply, access_token: string, refresh_toke
         maxAge: 0,
         httpOnly: true,
         path: TOKEN_ENDPOINT,
-        secure: PRODUCTION,
+        secure: SECURE,
         sameSite: SAME_SITE,
     })
 
@@ -159,7 +160,7 @@ const setSessionCookie = (reply: FastifyReply, session_token: string) => {
         maxAge: session_token ? STATE_LIFETIME : 0,
         httpOnly: true,
         path: TOKEN_ENDPOINT,
-        secure: PRODUCTION,
+        secure: SECURE,
         sameSite: SAME_SITE,
     })
     reply.header('Set-Cookie', sessionTokenCookie);
