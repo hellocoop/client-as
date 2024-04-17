@@ -23,6 +23,7 @@ runs:
         cache: "npm"
 
     - name: Install dependencies
+      shell: bash
       run: npm clean-install
 
     - name: Build App
