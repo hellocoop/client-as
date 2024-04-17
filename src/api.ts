@@ -49,10 +49,9 @@ const ISSUER = (HOST)
 const HTU = ISSUER + TOKEN_ENDPOINT
 
 const PRODUCTION = (process.env.NODE_ENV === 'production')
-const DEVELOPMENT = (process.env.NODE_ENV === 'development')
-
-const SAME_SITE = (DEVELOPMENT) ? 'none' : 'strict'
-const SECURE = PRODUCTION || (SAME_SITE === 'none')
+const ENABLE_3P_COOKIES = (process.env.ENABLE_3P_COOKIES === 'true')
+const SAME_SITE = (ENABLE_3P_COOKIES) ? 'none' : 'strict'
+const SECURE = PRODUCTION || ENABLE_3P_COOKIES
 
 const { version } = require('../package.json')
 
