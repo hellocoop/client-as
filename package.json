@@ -6,6 +6,9 @@
   "directories": {
     "test": "test"
   },
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "start": "node dist/server.js",
     "build": "rimraf dist && tsc -p tsconfig.prod.json",
