@@ -1,4 +1,4 @@
-// store state of auth 
+// store state of auth
 
 import Redis from 'ioredis';
 import { STATE_LIFETIME } from './constants';
