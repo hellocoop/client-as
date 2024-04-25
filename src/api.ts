@@ -21,7 +21,8 @@ import {
     ACCESS_LIFETIME,
     STATE_LIFETIME,
     REFRESH_LIFETIME,
-    DPOP_LIFETIME
+    DPOP_LIFETIME,
+    LOGOUT_ENDPOINT
 } from './constants'
 
 interface Payload {
@@ -482,9 +483,20 @@ const tokenEndpoint = async (req: FastifyRequest, reply: FastifyReply) => {
     } catch (e) {
         const error = e as TokenError
         console.error('token endpoint fault',error)
+        setSessionCookie(reply, '')
         return reply.code(error.statusCode || 500).send({error: 'token parsing'})
     }
 }
+
+const logoutEndpoint = async (req: FastifyRequest, reply: FastifyReply) => {
+    const { nonce } = req.body as { nonce?: string }
+
+    await logoutUser(nonce || '')
+    setTokenCookies(reply, '', '')
+
+    return reply.send({loggedOut: true})
+}
+
 
 const introspectEndpoint = async (req: FastifyRequest, reply: FastifyReply) => {
     let token: string = ''
@@ -621,6 +633,7 @@ const api = (app: FastifyInstance) => {
         return reply.send(auth)
     })
     app.post(TOKEN_ENDPOINT, tokenEndpoint)
+    app.post(LOGOUT_ENDPOINT, logoutEndpoint)
     app.post(INTROSPECTION_ENDPOINT, introspectEndpoint)
     app.get(INTROSPECTION_ENDPOINT, introspectEndpoint)
     app.post(REVOCATION_ENDPOINT, (req, reply) => {
