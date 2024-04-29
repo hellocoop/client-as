@@ -32,7 +32,7 @@ const read = async (key: string): Promise<State | undefined> => {
 
 const create = async (key: string, value: State): Promise<void> => {
   if (redis) {
-    await redis.set(key, JSON.stringify(value));
+    await redis.set(key, JSON.stringify(value), 'EX', STATE_LIFETIME);
   } else {
     state[key] = value;
   }
