@@ -1,12 +1,35 @@
 // store state of auth
 
-import Redis from 'ioredis';
+import Redis, {Cluster} from 'ioredis';
 import { STATE_LIFETIME } from './constants';
 
-let redis: Redis | undefined;
+const redisConfig = {
+  host: process.env.REDIS_HOST,
+  port: +(process.env.REDIS_PORT || 6379),
+  options: {
+    username: process.env.REDIS_USERNAME,
+    password: process.env.REDIS_PASSWORD,
+    ...(process.env.REDIS_ENABLE_TLS === 'true') && {tls: {
+        rejectUnauthorized: process.env.REDIS_CLUSTER !== 'true', // cert validation throwing error in cluster mode
+      }}
+  },
+  isCluster: process.env.REDIS_CLUSTER === 'true',
+};
 
-if (process.env.REDIS_URL) {
-  redis = new Redis(process.env.REDIS_URL);
+let redis: Redis | Cluster | undefined;
+
+
+if (process.env.REDIS_HOST) {
+  if (redisConfig.isCluster) {
+    redis = new Redis.Cluster([{host: redisConfig.host, port: redisConfig.port}], {redisOptions: redisConfig.options});
+  } else {
+    redis = new Redis({
+        host: redisConfig.host,
+        port: redisConfig.port,
+        ...redisConfig.options
+      }
+    );
+  }
 }
 
 type State = {
