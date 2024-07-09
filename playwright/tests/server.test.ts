@@ -48,6 +48,8 @@ test.describe('Testing Client', () => {
         const response = await page.request.get(CLIENT_API+'?op=auth')
         const json = await response.json()
         expect(json).toEqual(loggedOut)
+        const cookies = await page.context().cookies();
+        expect(cookies).toEqual([])
     })
 
     test('Logged Out', async ({ page, context }) => {
