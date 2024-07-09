@@ -36,7 +36,8 @@ interface Payload {
     jti: string
     cnf?: {
         jkt: string
-    }
+    },
+    extra?: Record<string, any>
 
 }
 
@@ -253,6 +254,9 @@ const refreshFromCode = async (code: string, client_id: string, jkt: string): Pr
         exp: now + REFRESH_LIFETIME,
         jti: randomUUID(),
     }
+    if (currentState.extra) {
+        payload.extra = currentState.extra
+    }
     if (USE_DPOP) {
         payload.cnf = {
             jkt: jkt
@@ -320,15 +324,18 @@ const refreshFromSession = async (session_token: string) => {
     if (currentState.iss !== ISSUER) {
         throw new TokenError(400, 'session_token invalid issuer')
     }
-    const refreshPayload = {
+    const refreshPayload: Payload = {
         iss: ISSUER,
-        sub: currentState.sub,
-        aud: currentState.aud,
+        sub: currentState.sub as string,
+        aud: currentState.aud as string,
         client_id: payload.client_id,
         token_type: 'refresh_token',
         iat: now,
         exp: now + REFRESH_LIFETIME,
         jti: randomUUID()
+    }
+    if (currentState.extra) {
+        refreshPayload.extra = currentState.extra
     }
     const newRefreshToken = jws.sign({
         header: JWT_HEADER,
@@ -532,7 +539,7 @@ const loginSync = async ( params: LoginSyncParams ): Promise<LoginSyncResponse> 
     const { payload, token } = params
     const { nonce, sub } = payload
 
-    let loginSyncState = {}
+    let extra = null
 
     if (!PRODUCTION) {
         console.log('loginSync', {payload, token})
@@ -560,8 +567,8 @@ const loginSync = async ( params: LoginSyncParams ): Promise<LoginSyncResponse> 
                     await logoutUser(nonce)
                     return { accessDenied: true}
                 }
-                if (json.payload) {
-                    loginSyncState = json.payload
+                if (json.extra) {
+                    extra = json.extra
                 }
             } catch (e) {
                 console.error('loginSync - JSON parsing error', e)
@@ -593,15 +600,17 @@ const loginSync = async ( params: LoginSyncParams ): Promise<LoginSyncResponse> 
     }
 
     // we have a valid state to change to sync login across channels
-    await state.update(nonce, {
-        ...loginSyncState,
+    const statePayload: state.State = {
         iss: ISSUER,
         exp: now + STATE_LIFETIME,
         nonce,
         loggedIn: true,
         sub
-    })
-
+    }
+    if (extra) {
+        statePayload.extra = extra
+    }
+    await state.update(nonce, statePayload)
 
     return {}
 }

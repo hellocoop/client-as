@@ -390,4 +390,62 @@ test.describe('Testing Authorization Server Errors', () => {
         expect(iss).toEqual(ISSUER)
     })
 
+    test('User DB Sync returns extra data', async ({ page, request, context }) => {
+        const syncMockResponse = await request.post(SYNC_MOCK_API, {
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            data: JSON.stringify({
+                code: 200,
+                response: {
+                    extra: {
+                        app_sub: '1234567890'
+                    }
+                }
+            })
+        
+        })
+        expect(syncMockResponse.status()).toBe(200)
+        const response = await request.post(ISSUER + TOKEN_ENDPOINT, {
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded'
+            },
+            data: 'grant_type=cookie_token&client_id=docker-test'
+        })
+        const jsonAS = await response.json()
+        expect(jsonAS).toBeDefined()
+        expect(jsonAS.loggedIn).toBe(false)
+        const nonce = jsonAS.nonce
+        expect(nonce).toBeDefined()
+        const query = new URLSearchParams({op: 'login', nonce, target_uri: CLIENT_API+'?op=auth'})
+        await page.goto(CLIENT_API+'?'+query.toString())
+        const body = await page.textContent('body');
+        try {
+            const json = JSON.parse(body as string);
+            delete json.iat
+            expect(json).toEqual(loggedIn)
+        }
+        catch (e) {
+            expect(e).toBeNull()
+        }
+
+        const response2 = await request.post(ISSUER + TOKEN_ENDPOINT, {
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded'
+            },
+            data: 'grant_type=cookie_token&client_id=docker-test'
+        })
+        const jsonAS2 = await response2.json()
+        expect(jsonAS2).toBeDefined()
+        expect(jsonAS2.loggedIn).toBe(true)
+
+        const response3 = await request.get(ISSUER + INTROSPECTION_ENDPOINT)
+        const jsonAS3 = await response3.json()
+        expect(jsonAS3).toBeDefined()
+        const { sub, iss, extra } = jsonAS3
+        expect(sub).toEqual(loggedIn.sub)
+        expect(iss).toEqual(ISSUER)
+        expect(extra).toEqual({app_sub: '1234567890'})
+    })
+
 });
