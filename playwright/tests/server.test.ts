@@ -82,6 +82,9 @@ test.describe('Testing Client', () => {
         const json = await response.json()
         delete json.iat
         expect(json).toEqual(loggedIn)
+        const cookies = await page.context().cookies();
+        expect(cookies).toHaveLength(1)
+        expect(cookies[0].name).toBe('hellocoop_auth')
     })
 
 });
