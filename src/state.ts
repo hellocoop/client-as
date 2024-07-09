@@ -17,6 +17,7 @@ type State = {
   aud?: string,
   sub?: string,
   code_used?: number
+  extra?: Record<string, any>
 }
 
 const state: Record<string, State> = {};
