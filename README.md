@@ -56,6 +56,7 @@ User is logged in. access_token and refresh_token cookies have been created and 
 
 After the user has successfully logged in, call 
 
+```
 POST /token HTTP/1.1
 Host: app.tiltingpoint.com
 Content-Type: application/x-www-form-urlencoded
@@ -64,14 +65,20 @@ DPoP: zzzzz
 grant_type=authorization_code&
 client_id=SDK-1.0.0
 code=<nonce>
+```
 
+will return
+```
 {
     "access_token": "xxx",
     "token_type": "DPoP",
     "refresh_token": "yyy",
     "expires_in": 300
 }
+```
+Refreshing an access token
 
+```
 POST /token HTTP/1.1
 Host: app.tiltingpoint.com
 Content-Type: application/x-www-form-urlencoded
@@ -80,22 +87,22 @@ DPoP: zzzzz
 Refresh
 grant_type=refresh_token&
 refresh_token=yyy
+```
 
+## Endpoints
 
-Endpoints
-
-/token // public
+### /token // public
 
 grant_type="cookie_token"
 device_info ???
 
-/jwks
+### /jwks
 
-/revoke
+### /revoke
 
-/.wellknown/oauth-authorization-server
+### /.wellknown/oauth-authorization-server
 
-/login
+### /login
     - called by client after successful login
 
 
