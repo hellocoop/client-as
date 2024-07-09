@@ -23,6 +23,7 @@ import {
     REFRESH_LIFETIME,
     DPOP_LIFETIME
 } from './constants'
+import { log } from 'console';
 
 interface Payload {
     iss: string
@@ -531,6 +532,8 @@ const loginSync = async ( params: LoginSyncParams ): Promise<LoginSyncResponse> 
     const { payload, token } = params
     const { nonce, sub } = payload
 
+    let loginSyncState = {}
+
     if (!PRODUCTION) {
         console.log('loginSync', {payload, token})
     }
@@ -556,6 +559,9 @@ const loginSync = async ( params: LoginSyncParams ): Promise<LoginSyncResponse> 
                     console.log('loginSync - access denied for sub', sub)
                     await logoutUser(nonce)
                     return { accessDenied: true}
+                }
+                if (json.payload) {
+                    loginSyncState = json.payload
                 }
             } catch (e) {
                 console.error('loginSync - JSON parsing error', e)
@@ -588,6 +594,7 @@ const loginSync = async ( params: LoginSyncParams ): Promise<LoginSyncResponse> 
 
     // we have a valid state to change to sync login across channels
     await state.update(nonce, {
+        ...loginSyncState,
         iss: ISSUER,
         exp: now + STATE_LIFETIME,
         nonce,
