@@ -80,7 +80,8 @@ describe('Cookie Token', () => {
         assert.strictEqual(sessionCookie.path, TOKEN_ENDPOINT, `session_token cookie path is ${TOKEN_ENDPOINT}`);
         session_token = sessionCookie.value;
         assert(session_token, 'session_token cookie value does not exist');
-        const { header, payload } = jws.decode(session_token, { json: true });
+        const { header, payload } = jws.decode(session_token, { json: true }) as jws.Signature
+
         assert(header, 'session_token cookie value is not a valid JWT');
         assert.strictEqual(header.alg, 'RS256', 'session_token alg is not RS256');
         const valid = jws.verify(sessionCookie.value, 'RS256', PUBLIC_KEY);
@@ -133,7 +134,7 @@ describe('Cookie Token', () => {
         assert(refreshCookie.maxAge, 'refresh_token cookie does not have maxAge');
         assert.strictEqual(refreshCookie.maxAge, REFRESH_LIFETIME, `refresh_token cookie maxAge is not ${REFRESH_LIFETIME}`);
         assert.strictEqual(refreshCookie.path, TOKEN_ENDPOINT, `refresh_token cookie path is not ${TOKEN_ENDPOINT}`);
-        const { header: accessHeader, payload: accessPayload } = jws.decode(accessCookie.value, { json: true });
+        const { header: accessHeader, payload: accessPayload } = jws.decode(accessCookie.value, { json: true }) as jws.Signature
         assert(accessHeader, 'access_token cookie value is not a valid JWT');
         assert.strictEqual(accessHeader.alg, 'RS256', 'access_token alg is not RS256');
         assert.strictEqual(accessHeader.typ, 'at+jwt', 'access_token typ is not at+jwt');
@@ -143,7 +144,7 @@ describe('Cookie Token', () => {
         assert.strictEqual(accessPayload.client_id, WEBVIEW_CLIENT_ID, `access_token aud is not ${WEBVIEW_CLIENT_ID}`);
         assert.strictEqual(accessPayload.exp - accessPayload.iat, ACCESS_LIFETIME, `access_token exp - iat is not ${ACCESS_LIFETIME}`);
         assert.strictEqual(accessPayload.token_type, 'access_token', 'access_token token_type is not access_token');
-        const { header: refreshHeader, payload: refreshPayload } = jws.decode(refreshCookie.value, { json: true });
+        const { header: refreshHeader, payload: refreshPayload } = jws.decode(refreshCookie.value, { json: true }) as jws.Signature
         assert(refreshHeader, 'refresh_token cookie value is not a valid JWT');
         assert.strictEqual(refreshHeader.alg, 'RS256', 'refresh_token alg is not RS256');
         const refreshValid = jws.verify(refreshCookie.value, 'RS256', PUBLIC_KEY);
@@ -196,7 +197,7 @@ describe('Cookie Token', () => {
         assert.strictEqual(refreshCookie.maxAge, REFRESH_LIFETIME, `refresh_token cookie maxAge is not ${REFRESH_LIFETIME}`);
         assert.strictEqual(refreshCookie.path, TOKEN_ENDPOINT, `refresh_token cookie path is not ${TOKEN_ENDPOINT}`);
 
-        const { header: accessHeader, payload: accessPayload } = jws.decode(accessCookie.value, { json: true });
+        const { header: accessHeader, payload: accessPayload } = jws.decode(accessCookie.value, { json: true }) as jws.Signature
         assert(accessHeader, 'access_token cookie value is not a valid JWT');
         assert.strictEqual(accessHeader.alg, 'RS256', 'access_token alg is not RS256');
         assert.strictEqual(accessHeader.typ, 'at+jwt', 'access_token typ is not at+jwt');
@@ -207,7 +208,7 @@ describe('Cookie Token', () => {
         assert.strictEqual(accessPayload.exp - accessPayload.iat, ACCESS_LIFETIME, `access_token exp - iat is not ${ACCESS_LIFETIME}`);
         assert.strictEqual(accessPayload.token_type, 'access_token', 'access_token token_type is not access_token');
 
-        const { header: refreshHeader, payload: refreshPayload } = jws.decode(refreshCookie.value, { json: true });
+        const { header: refreshHeader, payload: refreshPayload } = jws.decode(refreshCookie.value, { json: true }) as jws.Signature
         assert(refreshHeader, 'refresh_token cookie value is not a valid JWT');
         assert.strictEqual(refreshHeader.alg, 'RS256', 'refresh_token alg is not RS256');
         const refreshValid = jws.verify(refreshCookie.value, 'RS256', PUBLIC_KEY);

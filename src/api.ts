@@ -185,7 +185,7 @@ const validateDPoP = (req: FastifyRequest): string => {
     if (Array.isArray(dpop)) {
         throw new TokenError(400, 'Only one DPoP header is allowed')
     }
-    const { header, payload } = jws.decode(dpop as string, { json: true })
+    const { header, payload } = jws.decode(dpop as string, { json: true }) || {} as jws.Signature
     if (!header || !payload) {
         throw new TokenError(400, 'DPoP header is invalid')
     }
@@ -275,7 +275,7 @@ const refreshFromCode = async (code: string, client_id: string, jkt: string): Pr
 }
 
 const refreshFromRefresh = (refresh_token: string): string => {
-    const { header, payload } = jws.decode(refresh_token, { json: true })
+    const { header, payload } = jws.decode(refresh_token, { json: true }) || {} as jws.Signature
     if (!header || !payload) {
         throw new TokenError(400, 'refresh_token is invalid')
     }
@@ -301,7 +301,7 @@ const refreshFromRefresh = (refresh_token: string): string => {
 
 const refreshFromSession = async (session_token: string) => {
     // lookup session_token and get payload
-    const { header, payload } = jws.decode(session_token, { json: true })
+    const { header, payload } = jws.decode(session_token, { json: true }) || {} as jws.Signature
     // TODO -- verify session_token
     if (!header || !payload) {
         throw new TokenError(400, 'session_token is invalid')
@@ -346,7 +346,7 @@ const refreshFromSession = async (session_token: string) => {
 }
 
 const accessFromRefresh = (refresh_token: string): string => {
-    const { header, payload } = jws.decode(refresh_token, { json: true })
+    const { header, payload } = jws.decode(refresh_token, { json: true }) || {} as jws.Signature
     if (!header || !payload) {
         throw new TokenError(400, 'refresh_token is invalid')
     }
@@ -430,7 +430,8 @@ const tokenEndpoint = async (req: FastifyRequest, reply: FastifyReply) => {
                 return reply.code(400).send({error:'invalid_request', error_description:'refresh_token is required'})
             }
             const jwt = validateDPoP(req)
-            const {payload} = jws.decode(refresh_token, { json: true })
+
+            const { payload } = jws.decode(refresh_token, { json: true }) || {} as jws.Signature
             if (USE_DPOP) {
                 if (!payload?.cnf?.jkt) {
                     throw new TokenError(400, 'refresh_token is invalid')
@@ -509,7 +510,7 @@ const introspectEndpoint = async (req: FastifyRequest, reply: FastifyReply) => {
     }
     if (!jws.verify(token, 'RS256', PUBLIC_KEY))
         return reply.send({active: false})
-    const { payload } = jws.decode(token, { json: true })
+    const { payload } = jws.decode(token, { json: true }) || {} as jws.Signature
     if (!payload) {
         return reply.send({active: false})
     }
@@ -622,6 +623,7 @@ const helloConfig: HelloConfig = {
     logConfig: true,
     apiRoute: AUTH_ROUTE,
     loginSync,
+    // logoutSync,
 }
 
 // console.log('api.js', {helloConfig})
@@ -645,9 +647,15 @@ const api = (app: FastifyInstance) => {
     app.get(JWKS_ENDPOINT, (req, reply) => {
         return reply.send(PUBLIC_JWKS)
     })
-    app.get(AUTH_ROUTE+"/version", (request, reply) => {
+    app.get(AUTH_ROUTE+"/version", (req, reply) => {
         return reply.send({version});
     });
+    if (!PRODUCTION) {
+        // used to test if cookies are getting cleared
+        app.get(TOKEN_ENDPOINT+"/cookies", (req, reply) => {
+            return reply.send({cookies: getCookies(req)});
+        });
+    }
 }
 
 export { api, PORT, loginSync } // loginSync is exported for testing

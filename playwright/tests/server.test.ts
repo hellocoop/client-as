@@ -2,7 +2,9 @@ import {
     AUTH_ROUTE,
     TOKEN_ENDPOINT,
     INTROSPECTION_ENDPOINT,
+    COOKIES_ENDPOINT,
 } from '../../src/constants'
+
 const ISSUER = 'http://localhost:3000'
 const CLIENT_API = ISSUER + AUTH_ROUTE
 const MOCK_API = 'http://localhost:3333/mock'
@@ -98,7 +100,7 @@ test.describe('Testing Authorization Server', () => {
         expect(json).toEqual(loggedOut)
     })
 
-    test('AS login', async ({ page, request, context }) => {
+    test('AS login', async ({ page, request }) => {
         const response = await request.post(ISSUER + TOKEN_ENDPOINT, {
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded'
@@ -113,6 +115,12 @@ test.describe('Testing Authorization Server', () => {
         const query = new URLSearchParams({op: 'login', nonce, target_uri: CLIENT_API+'?op=auth'})
         await page.goto(CLIENT_API+'?'+query.toString())
         const body = await page.textContent('body');
+
+
+        const cookies1 = await page.context().cookies();
+        console.log('Cookies - 2:', cookies1);
+
+
         try {
             const json = JSON.parse(body as string);
             delete json.iat
@@ -131,12 +139,20 @@ test.describe('Testing Authorization Server', () => {
         expect(jsonAS2).toBeDefined()
         expect(jsonAS2.loggedIn).toBe(true)
 
+        const cookies2 = await page.context().cookies();
+        console.log('Cookies - 2:', cookies2);
+
+        const cookieResponse = await request.get(ISSUER + COOKIES_ENDPOINT)
+        console.log('Cookies - 3:', await cookieResponse.json());
+
         const response3 = await request.get(ISSUER + INTROSPECTION_ENDPOINT)
         const jsonAS3 = await response3.json()
         expect(jsonAS3).toBeDefined()
         const { sub, iss } = jsonAS3
         expect(sub).toEqual(loggedIn.sub)
         expect(iss).toEqual(ISSUER)
+
+   
     })
 
 });
