@@ -579,6 +579,8 @@ const loginSync = async ( params: LoginSyncParams ): Promise<LoginSyncResponse> 
         // fall through to update state as access is granted
     }
 
+// TBD - move reading in state further up so that we can include state in call to loginSyncUrl
+
     const now = Math.floor(Date.now() / 1000)
     const currentState = await state.read(nonce)
     if (!currentState) {
