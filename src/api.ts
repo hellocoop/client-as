@@ -595,6 +595,10 @@ const loginSync = async ( params: LoginSyncParams ): Promise<LoginSyncResponse> 
         aud,
     }
 
+    if (currentState?.origin?.client_id) {
+        statePayload.client_id = currentState.origin.client_id
+    }
+
     // POTENTIAL FUTURE - reduce size of hello_auth cookie
     // this is what is returned from op=auth
     // cookie will contain updatedAuth + defaults of `isLoggedIn`, `sub`, and `iat`

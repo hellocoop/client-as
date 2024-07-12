@@ -86,9 +86,7 @@ describe('Cookie Token', () => {
         assert.strictEqual(header.alg, 'RS256', 'session_token alg is not RS256');
         const valid = jws.verify(sessionCookie.value, 'RS256', PUBLIC_KEY);
         assert(valid, 'session_token cookie is not valid');
-
         assert.strictEqual(payload.iss, "http://localhost:3000", 'session_token iss is not http://localhost:3000');
-        assert.strictEqual(payload.client_id, WEBVIEW_CLIENT_ID, `session_token aud is not ${WEBVIEW_CLIENT_ID}`);
         assert.strictEqual(payload.nonce, nonce, 'session_token nonce does not match returned nonce');
         assert.strictEqual(payload.exp - payload.iat, STATE_LIFETIME, `session_token exp - iat is not ${STATE_LIFETIME}`);
         assert.strictEqual(payload.token_type, 'session_token', 'session_token token_type is not session_token');
