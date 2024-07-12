@@ -1,4 +1,5 @@
-# AS4Mobile
+# client_as
+
 Authorization Server for Mobile Apps
 
 ## Environment Configuration
@@ -108,3 +109,12 @@ device_info ???
 
 
 
+## Development
+
+- clone repo
+- `npm i` to install all node modules
+- `npx playwright install` to install Playwright binaries to test with
+
+`npm test` will run fastify.inject() tests
+
+`npm run playwright` will start all the services with docker compose and then run the Playwright tests for browser interactions
