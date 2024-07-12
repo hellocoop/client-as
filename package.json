@@ -11,7 +11,7 @@
     "debug": "node --inspect dist/server.js",
     "build": "rimraf dist && tsc -p tsconfig.prod.json",
     "release": "npm run build && ./scripts/release.sh",
-    "playwright": "npm run build && docker-compose -f docker-compose.playwright.yml up --build -d && cd playwright && playwright test && docker-compose -f ../docker-compose.playwright.yml down",
+    "playwright": "npm run build && docker compose -f docker-compose.playwright.yml up --build -d && cd playwright && playwright test && docker compose -f ../docker-compose.playwright.yml down",
     "test": "OAUTH_DPOP=true mocha -r ts-node/register tests/*.spec.ts && mocha -r ts-node/register tests/refresh-token.spec.ts"
   },
   "author": "",
