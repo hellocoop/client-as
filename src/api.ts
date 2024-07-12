@@ -243,7 +243,7 @@ const refreshFromCode = async (code: string, client_id: string, jkt: string): Pr
         // future - logout user to revoke issued refresh_token
         throw new TokenError(400, 'code has already been used')
     }
-    if (currentState.client_id !== client_id) {
+    if (currentState.client_id &&  currentState.client_id !== client_id) {
         throw new TokenError(400, 'code client_id does not match')
     }
     currentState.code_used = now
