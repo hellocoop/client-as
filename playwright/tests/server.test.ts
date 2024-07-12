@@ -9,6 +9,7 @@ const ISSUER = 'http://localhost:3000'
 const CLIENT_API = ISSUER + AUTH_ROUTE
 const MOCK_API = 'http://localhost:3333/mock'
 const SYNC_MOCK_API = 'http://localhost:8888/mock'
+const SYNC_ENDPOINT = 'http://localhost:8888/sync'
 
 import { test, expect } from '@playwright/test';
 
@@ -117,9 +118,14 @@ test.describe('Testing Authorization Server', () => {
         const body = await page.textContent('body');
 
 
-        const cookies1 = await page.context().cookies();
-        console.log('Cookies - 2:', cookies1);
-
+        // check cookie tokens that are set
+        const cookieResponse1 = await request.get(ISSUER + COOKIES_ENDPOINT)
+        const cookies1 = await cookieResponse1.json()
+        expect(cookies1).toBeDefined()
+        expect(cookies1.cookies).toBeDefined()
+        expect(cookies1.cookies.session_token).toBeDefined()
+        expect(cookies1.cookies.access_token).toBeUndefined()
+        expect(cookies1.cookies.refresh_token).toBeUndefined()
 
         try {
             const json = JSON.parse(body as string);
@@ -139,11 +145,14 @@ test.describe('Testing Authorization Server', () => {
         expect(jsonAS2).toBeDefined()
         expect(jsonAS2.loggedIn).toBe(true)
 
-        const cookies2 = await page.context().cookies();
-        console.log('Cookies - 2:', cookies2);
-
-        const cookieResponse = await request.get(ISSUER + COOKIES_ENDPOINT)
-        console.log('Cookies - 3:', await cookieResponse.json());
+        // check cookie tokens that are set
+        const cookieResponse2 = await request.get(ISSUER + COOKIES_ENDPOINT)
+        const cookies2 = await cookieResponse2.json()
+        expect(cookies2).toBeDefined()
+        expect(cookies2.cookies).toBeDefined()
+        expect(cookies2.cookies.session_token).toBeUndefined()
+        expect(cookies2.cookies.access_token).toBeDefined()
+        expect(cookies2.cookies.refresh_token).toBeDefined()
 
         const response3 = await request.get(ISSUER + INTROSPECTION_ENDPOINT)
         const jsonAS3 = await response3.json()
@@ -152,7 +161,21 @@ test.describe('Testing Authorization Server', () => {
         expect(sub).toEqual(loggedIn.sub)
         expect(iss).toEqual(ISSUER)
 
-   
+
+        const logoutResponse = await request.get(CLIENT_API+'?op=logout')
+        expect(logoutResponse.status()).toBe(200)
+        const jsonLogout = await logoutResponse.json()
+        expect(jsonLogout).toEqual(loggedOut)
+
+        // check we have no cookies after logging out
+        const cookieResponse3 = await request.get(ISSUER + COOKIES_ENDPOINT)
+        expect(cookieResponse3.status()).toBe(200)
+        const cookies3 = await cookieResponse3.json()
+        expect(cookies3).toBeDefined()
+        expect(cookies3.cookies).toBeDefined()
+        expect(cookies3.cookies.session_token).toBeUndefined()
+        expect(cookies3.cookies.access_token).toBeUndefined()
+        expect(cookies3.cookies.refresh_token).toBeUndefined()
     })
 
 });
@@ -275,7 +298,9 @@ test.describe('Testing Authorization Server Errors', () => {
             },
             data: JSON.stringify({
                 code: 200,
-                response: '{"accessDenied":true}'
+                response: { 
+                    accessDenied:true
+                }
             })
         
         })
@@ -285,12 +310,6 @@ test.describe('Testing Authorization Server Errors', () => {
         await page.goto(CLIENT_API+'?'+query.toString())
         const finalUrl = page.url();
         const urlParams = new URLSearchParams(new URL(finalUrl).search);
-
-
-        // urlParams.forEach((value, key) => {
-        //     console.log(`${key}: ${value}`);
-        // });
-
 
         expect(urlParams.get('error')).toBe('access_denied')
         expect(urlParams.get('op')).toBe('auth')
@@ -411,7 +430,8 @@ test.describe('Testing Authorization Server Errors', () => {
         expect(iss).toEqual(ISSUER)
     })
 
-    test('User DB Sync returns extra data', async ({ page, request, context }) => {
+    test('User DB Sync gets origin data returns payload sub and scope', async ({ page, request, context }) => {
+        // set mock response
         const syncMockResponse = await request.post(SYNC_MOCK_API, {
             headers: {
                 'Content-Type': 'application/json'
@@ -419,25 +439,38 @@ test.describe('Testing Authorization Server Errors', () => {
             data: JSON.stringify({
                 code: 200,
                 response: {
-                    extra: {
-                        app_sub: '1234567890'
+                    payload: {
+                        sub: 'app-sub-id',
+                        scope: 'test',
+                        client_id: 'test-app',
                     }
                 }
             })
         
         })
         expect(syncMockResponse.status()).toBe(200)
+
+        // start login flow by trying to get an access token, passing in the client_id and redirect_uri which will be 
+        // passed to the sync endpoint as an origin object
+        const tokenRequest = {
+            grant_type: 'cookie_token',
+            client_id: 'test-app',
+            redirect_uri: 'https://example.com'
+        }     
+        const data = new URLSearchParams(tokenRequest).toString()
         const response = await request.post(ISSUER + TOKEN_ENDPOINT, {
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded'
             },
-            data: 'grant_type=cookie_token&client_id=docker-test'
+            data
         })
         const jsonAS = await response.json()
         expect(jsonAS).toBeDefined()
         expect(jsonAS.loggedIn).toBe(false)
         const nonce = jsonAS.nonce
         expect(nonce).toBeDefined()
+
+        // start Hello login flow -- this should cause the sync endpoint to be called with the origin data
         const query = new URLSearchParams({op: 'login', nonce, target_uri: CLIENT_API+'?op=auth'})
         await page.goto(CLIENT_API+'?'+query.toString())
         const body = await page.textContent('body');
@@ -450,23 +483,44 @@ test.describe('Testing Authorization Server Errors', () => {
             expect(e).toBeNull()
         }
 
+        // check what the sync endpoint received
+        const syncRequest = await request.get(SYNC_ENDPOINT)
+        expect(syncRequest.status()).toBe(200)
+        const syncRequestJson = await syncRequest.json()
+        const { payload, token, origin } = syncRequestJson
+        expect(payload).toBeDefined()
+        expect(token).toBeDefined()
+        expect(origin).toBeDefined()
+        expect(payload.sub).toEqual(loggedIn.sub)
+        expect(payload.aud).toEqual('hello-docker-test-client')
+        expect(payload.name).toEqual(loggedIn.name)
+        expect(payload.email).toEqual(loggedIn.email)
+        expect(payload.email_verified).toEqual(loggedIn.email_verified)
+        expect(origin.client_id).toEqual('test-app')
+        expect(origin.redirect_uri).toEqual('https://example.com')
+
+        // get the access token again
         const response2 = await request.post(ISSUER + TOKEN_ENDPOINT, {
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded'
             },
-            data: 'grant_type=cookie_token&client_id=docker-test'
+            data,
         })
         const jsonAS2 = await response2.json()
         expect(jsonAS2).toBeDefined()
         expect(jsonAS2.loggedIn).toBe(true)
 
+        // get access token contents from the introspection endpoint using cookie_token
         const response3 = await request.get(ISSUER + INTROSPECTION_ENDPOINT)
         const jsonAS3 = await response3.json()
+        
         expect(jsonAS3).toBeDefined()
-        const { sub, iss, extra } = jsonAS3
-        expect(sub).toEqual(loggedIn.sub)
+        const { active, sub, iss, hello_sub, scope, client_id } = jsonAS3
+        expect(active).toBe(true)
+        expect(sub).toEqual('app-sub-id')
         expect(iss).toEqual(ISSUER)
-        expect(extra).toEqual({app_sub: '1234567890'})
+        expect(hello_sub).toEqual(loggedIn.sub)
+        expect(scope).toEqual('test')
+        expect(client_id).toEqual('test-app')
     })
-
 });

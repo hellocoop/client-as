@@ -8,6 +8,7 @@
   },
   "scripts": {
     "start": "node dist/server.js",
+    "debug": "node --inspect dist/server.js",
     "build": "rimraf dist && tsc -p tsconfig.prod.json",
     "release": "npm run build && ./scripts/release.sh",
     "playwright": "npm run build && docker-compose -f docker-compose.playwright.yml up --build -d && cd playwright && playwright test && docker-compose -f ../docker-compose.playwright.yml down",
@@ -31,7 +32,8 @@
   },
   "dependencies": {
     "@fastify/formbody": "^7.4.0",
-    "@hellocoop/fastify": "latest",
+    "@hellocoop/fastify": "^1.11.4",
+    "@hellocoop/router": "^1.9.2",
     "cookie": "^0.6.0",
     "fastify": "^4.26.2",
     "ioredis": "^5.3.2",
