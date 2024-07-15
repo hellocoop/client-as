@@ -403,8 +403,8 @@ const makeSessionToken = async (origin: state.Origin): Promise<{session_token: s
 }
 
 const tokenEndpoint = async (req: FastifyRequest, reply: FastifyReply) => {
-    const { grant_type, client_id, refresh_token, code, redirect_uri } = req.body as
-        { grant_type: string, client_id: string, refresh_token: string, code: string, redirect_uri: string}
+    const { grant_type, client_id, refresh_token, code } = req.body as
+        { grant_type: string, client_id: string, refresh_token: string, code: string}
 
     // console.log({grant_type, headers: req.headers, cookies: req.headers['cookie']})
 
@@ -462,7 +462,7 @@ const tokenEndpoint = async (req: FastifyRequest, reply: FastifyReply) => {
             const { session_token, refresh_token } = getCookies(req)
             if (!session_token && !refresh_token) {
                 // no existing session
-                const origin = { client_id, redirect_uri }
+                const origin = { client_id }
                 const { session_token, nonce } = await makeSessionToken( origin )
                 if (!session_token) {
                     return reply.code(500).send({error:'server_error: session_token not created'})
@@ -563,7 +563,7 @@ const logoutSync = async (params: LogoutSyncParams): Promise<LogoutSyncResponse>
 }
 
 const loginSync = async ( params: LoginSyncParams ): Promise<LoginSyncResponse> => {
-    const { payload, token } = params
+    const { payload, token, target_uri } = params
     const { nonce, sub, aud } = payload
 
 // TBD - move reading in state further up so that we can include state in call to loginSyncUrl
@@ -603,14 +603,22 @@ const loginSync = async ( params: LoginSyncParams ): Promise<LoginSyncResponse> 
     // this is what is returned from op=auth
     // cookie will contain updatedAuth + defaults of `isLoggedIn`, `sub`, and `iat`
     // const hello_auth: { updatedAuth: { app_sub?: string } } = { updatedAuth: {} }
-
+ 
+    const syncResponse: LoginSyncResponse = {}
     if (loginSyncUrl) { // see if user is allowed to login
         const response = await fetch(loginSyncUrl, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ payload, token, origin: currentState.origin })
+            body: JSON.stringify({ 
+                payload, 
+                token, 
+                origin: {
+                    client_id: currentState?.origin?.client_id,
+                    target_uri
+                }
+            })
         })
         if (!response.ok) {
                 console.log(`loginSyncUrl ${loginSyncUrl} returned ${response.status} - access denied for sub ${sub}`)
@@ -621,7 +629,7 @@ const loginSync = async ( params: LoginSyncParams ): Promise<LoginSyncResponse> 
         if ((response.status === 200) && (response.headers.get('content-type')?.includes('application/json'))) {
             try {
                 const json = await response.json()
-                const {accessDenied, payload}  = json                
+                const { accessDenied, payload, target_uri: new_target_uri }  = json                
                 if (accessDenied) {
                     console.log('loginSync - access denied for sub', sub)
                     await logoutUser(nonce)
@@ -637,7 +645,10 @@ const loginSync = async ( params: LoginSyncParams ): Promise<LoginSyncResponse> 
                         statePayload.scope = payload.scope
                     if (payload.client_id)
                         statePayload.client_id = payload.client_id
-
+                }
+                if (new_target_uri) {
+                    // redirect to new_target_uri
+                    syncResponse.target_uri = new_target_uri
                 }
             } catch (e) {
                 console.error('loginSync - JSON parsing error', e)
@@ -649,7 +660,7 @@ const loginSync = async ( params: LoginSyncParams ): Promise<LoginSyncResponse> 
 
     await state.update(nonce, statePayload)
 
-    return {} // we could minimize hello_auth cookie here by returning an object with updatedAuth
+    return syncResponse // we could minimize hello_auth cookie here by returning an object with updatedAuth
 }
 
 

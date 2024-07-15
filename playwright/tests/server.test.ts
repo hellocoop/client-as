@@ -455,7 +455,6 @@ test.describe('Testing Authorization Server Errors', () => {
         const tokenRequest = {
             grant_type: 'cookie_token',
             client_id: 'test-app',
-            redirect_uri: 'https://example.com'
         }     
         const data = new URLSearchParams(tokenRequest).toString()
         const response = await request.post(ISSUER + TOKEN_ENDPOINT, {
@@ -497,7 +496,7 @@ test.describe('Testing Authorization Server Errors', () => {
         expect(payload.email).toEqual(loggedIn.email)
         expect(payload.email_verified).toEqual(loggedIn.email_verified)
         expect(origin.client_id).toEqual('test-app')
-        expect(origin.redirect_uri).toEqual('https://example.com')
+        expect(origin.target_uri).toEqual(CLIENT_API+'?op=auth')
 
         // get the access token again
         const response2 = await request.post(ISSUER + TOKEN_ENDPOINT, {

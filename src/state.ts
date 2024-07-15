@@ -17,7 +17,7 @@ type BaseState = {
 
 type Origin = {
   client_id: string,
-  redirect_uri: string,
+  target_uri?: string,
 }
 
 type LoggedOutState = {
