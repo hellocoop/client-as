@@ -32,16 +32,36 @@ if (process.env.REDIS_HOST) {
   }
 }
 
-type State = {
-  loggedIn: boolean,
-  nonce?: string,
-  exp?: number,
-  iss?: string,
-  aud?: string,
-  sub?: string,
-  code_used?: number
+type BaseState = {
+  iss: string,
+  exp: number,
+  nonce: string,
 }
 
+type Origin = {
+  client_id: string,
+  target_uri?: string,
+}
+
+type LoggedOutState = {
+  loggedIn: false,
+  origin?: Origin,
+}
+
+type LoggedInState = {
+  loggedIn: true,
+  aud: string,
+  sub: string,
+  code_used?: number,
+  hello_sub?: string,
+  scope?: string,
+  client_id?: string,
+}
+
+
+type State = BaseState & (LoggedOutState | LoggedInState);
+
+// for development! ... in production, use redis
 const state: Record<string, State> = {};
 
 const read = async (key: string): Promise<State | undefined> => {
@@ -55,7 +75,7 @@ const read = async (key: string): Promise<State | undefined> => {
 
 const create = async (key: string, value: State): Promise<void> => {
   if (redis) {
-    await redis.set(key, JSON.stringify(value));
+    await redis.set(key, JSON.stringify(value), 'EX', STATE_LIFETIME);
   } else {
     state[key] = value;
   }
@@ -69,4 +89,12 @@ const update = async (key: string, value: State): Promise<void> => {
   }
 }
 
-export { create, read, update, State };
+const remove = async (key: string): Promise<void> => {
+  if (redis) {
+    await redis.del(key);
+  } else {
+    delete state[key];
+  }
+}
+
+export { create, read, update, remove, State, Origin };

@@ -9,32 +9,32 @@ function isDefaultMockValues() {
     return JSON.stringify(mockValues) === JSON.stringify(defaultMockValues);
 }
 
-// GET /sync
+// GET /sync -- get what was lasted posted
 fastify.get('/sync', async (request, reply) => {
   return lastSyncValue;
 });
 
-// DELETE /sync
+// DELETE /sync -- clear the last posted value
 fastify.delete('/sync', async (request, reply) => {
   lastSyncValue = null;
   return lastSyncValue;
 });
 
-// POST /sync
+// POST /sync -- this is the actual call being mocked
 fastify.post('/sync', async (request, reply) => {
-    if (isDefaultMockValues()) {
-        lastSyncValue = request.body
+  lastSyncValue = request.body
+  if (isDefaultMockValues()) {
         return reply.code(200).send({});
     }
     return reply.code(mockValues.code).send(mockValues.response);
 });
 
-// GET /mock
+// GET /mock -- get the current mock values
 fastify.get('/mock', async (request, reply) => {
   return mockValues;
 });
 
-// POST /mock
+// POST /mock -- set what will be mocked
 fastify.post('/mock', async (request, reply) => {
   const { code, response } = request.body;
   if (!code) {
