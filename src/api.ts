@@ -6,7 +6,7 @@ import jws, { Algorithm, Header } from 'jws'
 import jwkToPem, { JWK } from 'jwk-to-pem'
 import { randomUUID, createHash } from 'crypto';
 import { serialize as serializeCookie, parse as parseCookies } from 'cookie'
-import { helloAuth, HelloConfig, LoginSyncParams, LoginSyncResponse } from '@hellocoop/fastify'
+import { helloAuth, HelloConfig, LoginSyncParams, LoginSyncResponse, LogoutSyncParams, LogoutSyncResponse } from '@hellocoop/fastify'
 
 import { PUBLIC_JWKS, PRIVATE_KEY, PUBLIC_KEY } from './jwks'
 import * as state from './state'
@@ -24,20 +24,24 @@ import {
     DPOP_LIFETIME,
     LOGOUT_ENDPOINT
 } from './constants'
+import { log } from 'console';
+import { create } from 'domain';
+import { stat } from 'fs';
 
 interface Payload {
     iss: string
     sub: string
     aud: string
-    client_id: string
     token_type: string
     iat: number
     exp: number
     jti: string
     cnf?: {
         jkt: string
-    }
-
+    },
+    client_id?: string
+    hello_sub?: string
+    scope?: string
 }
 
 const HOST = process.env.HOST
@@ -124,7 +128,7 @@ const generateThumbprint = function(jwk: JWK) {
     return hash;
 }
 
-const setTokenCookies = (reply: FastifyReply, access_token: string, refresh_token: string) => {
+const createTokenCookies = ( access_token: string, refresh_token: string) => {
 
     const accessTokenCookie = serializeCookie('access_token', access_token || '', {
         maxAge: access_token ? ACCESS_LIFETIME : 0,
@@ -151,7 +155,7 @@ const setTokenCookies = (reply: FastifyReply, access_token: string, refresh_toke
         sameSite: SAME_SITE,
     })
 
-    reply.header('Set-Cookie', [accessTokenCookie, refreshTokenCookie, sessionTokenCookie]);
+    return [accessTokenCookie, refreshTokenCookie, sessionTokenCookie]
 }
 
 const setSessionCookie = (reply: FastifyReply, session_token: string) => {
@@ -184,7 +188,7 @@ const validateDPoP = (req: FastifyRequest): string => {
     if (Array.isArray(dpop)) {
         throw new TokenError(400, 'Only one DPoP header is allowed')
     }
-    const { header, payload } = jws.decode(dpop as string, { json: true })
+    const { header, payload } = jws.decode(dpop as string, { json: true }) || {} as jws.Signature
     if (!header || !payload) {
         throw new TokenError(400, 'DPoP header is invalid')
     }
@@ -240,13 +244,18 @@ const refreshFromCode = async (code: string, client_id: string, jkt: string): Pr
         // future - logout user to revoke issued refresh_token
         throw new TokenError(400, 'code has already been used')
     }
+    if (currentState.client_id &&  currentState.client_id !== client_id) {
+        throw new TokenError(400, 'code client_id does not match')
+    }
     currentState.code_used = now
     await state.update(code, currentState)
 
     const payload: Payload = {
         iss: ISSUER,
-        sub: currentState.sub as string,
-        aud: currentState.aud as string,
+        sub: currentState.sub,
+        aud: currentState.aud,
+        hello_sub: currentState.hello_sub,
+        scope: currentState.scope,
         client_id,
         token_type: 'refresh_token',
         iat: now,
@@ -271,7 +280,7 @@ const refreshFromCode = async (code: string, client_id: string, jkt: string): Pr
 }
 
 const refreshFromRefresh = (refresh_token: string): string => {
-    const { header, payload } = jws.decode(refresh_token, { json: true })
+    const { header, payload } = jws.decode(refresh_token, { json: true }) || {} as jws.Signature
     if (!header || !payload) {
         throw new TokenError(400, 'refresh_token is invalid')
     }
@@ -297,7 +306,7 @@ const refreshFromRefresh = (refresh_token: string): string => {
 
 const refreshFromSession = async (session_token: string) => {
     // lookup session_token and get payload
-    const { header, payload } = jws.decode(session_token, { json: true })
+    const { header, payload } = jws.decode(session_token, { json: true }) || {} as jws.Signature
     // TODO -- verify session_token
     if (!header || !payload) {
         throw new TokenError(400, 'session_token is invalid')
@@ -320,11 +329,13 @@ const refreshFromSession = async (session_token: string) => {
     if (currentState.iss !== ISSUER) {
         throw new TokenError(400, 'session_token invalid issuer')
     }
-    const refreshPayload = {
+    const refreshPayload: Payload = {
         iss: ISSUER,
-        sub: currentState.sub,
-        aud: currentState.aud,
-        client_id: payload.client_id,
+        sub: currentState.sub as string,
+        aud: currentState.aud as string,
+        hello_sub: currentState.hello_sub,
+        scope: currentState.scope,
+        client_id: currentState.client_id,
         token_type: 'refresh_token',
         iat: now,
         exp: now + REFRESH_LIFETIME,
@@ -339,7 +350,7 @@ const refreshFromSession = async (session_token: string) => {
 }
 
 const accessFromRefresh = (refresh_token: string): string => {
-    const { header, payload } = jws.decode(refresh_token, { json: true })
+    const { header, payload } = jws.decode(refresh_token, { json: true }) || {} as jws.Signature
     if (!header || !payload) {
         throw new TokenError(400, 'refresh_token is invalid')
     }
@@ -365,14 +376,15 @@ const accessFromRefresh = (refresh_token: string): string => {
     return newAccessToken
 }
 
-const makeSessionToken = async (client_id: string): Promise<{session_token: string, nonce: string}> => {
+const makeSessionToken = async (origin: state.Origin): Promise<{session_token: string, nonce: string}> => {
     const nonce = randomUUID()
     const now = Math.floor(Date.now() / 1000)
     const currentState: state.State = {
-        iss: ISSUER,
         loggedIn: false,
+        iss: ISSUER,
         exp: now + STATE_LIFETIME,
-        nonce
+        nonce,
+        origin,
     }
     await state.create(nonce, currentState)
     const params = {
@@ -382,8 +394,7 @@ const makeSessionToken = async (client_id: string): Promise<{session_token: stri
             iss: ISSUER,
             iat: now,
             exp: now + STATE_LIFETIME,
-            client_id,
-            nonce
+            nonce,
         },
         privateKey: PRIVATE_KEY
     }
@@ -394,7 +405,7 @@ const makeSessionToken = async (client_id: string): Promise<{session_token: stri
 
 const tokenEndpoint = async (req: FastifyRequest, reply: FastifyReply) => {
     const { grant_type, client_id, refresh_token, code } = req.body as
-        { grant_type: string, client_id: string, refresh_token: string, code: string }
+        { grant_type: string, client_id: string, refresh_token: string, code: string}
 
     // console.log({grant_type, headers: req.headers, cookies: req.headers['cookie']})
 
@@ -423,7 +434,8 @@ const tokenEndpoint = async (req: FastifyRequest, reply: FastifyReply) => {
                 return reply.code(400).send({error:'invalid_request', error_description:'refresh_token is required'})
             }
             const jwt = validateDPoP(req)
-            const {payload} = jws.decode(refresh_token, { json: true })
+
+            const { payload } = jws.decode(refresh_token, { json: true }) || {} as jws.Signature
             if (USE_DPOP) {
                 if (!payload?.cnf?.jkt) {
                     throw new TokenError(400, 'refresh_token is invalid')
@@ -444,14 +456,15 @@ const tokenEndpoint = async (req: FastifyRequest, reply: FastifyReply) => {
             })
         }
 
-        if (grant_type === 'cookie_token') { // non-standard
+        if (grant_type === 'cookie_token') { // non standard grant_type
             if (!client_id) {
                 return reply.code(400).send({error:'invalid_request', error_description:'client_id is required'})
             }
             const { session_token, refresh_token } = getCookies(req)
             if (!session_token && !refresh_token) {
                 // no existing session
-                const { session_token, nonce } = await makeSessionToken(client_id)
+                const origin = { client_id }
+                const { session_token, nonce } = await makeSessionToken( origin )
                 if (!session_token) {
                     return reply.code(500).send({error:'server_error: session_token not created'})
                 }
@@ -470,7 +483,7 @@ const tokenEndpoint = async (req: FastifyRequest, reply: FastifyReply) => {
                 ? refreshFromRefresh(refresh_token)
                 : await refreshFromSession(session_token)
             const newAccessToken = accessFromRefresh(newRefreshToken)
-            setTokenCookies(reply, newAccessToken, newRefreshToken)
+            reply.header('Set-Cookie', createTokenCookies( newAccessToken, newRefreshToken ))
             return reply.send({
                 loggedIn: true
             })
@@ -513,7 +526,7 @@ const introspectEndpoint = async (req: FastifyRequest, reply: FastifyReply) => {
     }
     if (!jws.verify(token, 'RS256', PUBLIC_KEY))
         return reply.send({active: false})
-    const { payload } = jws.decode(token, { json: true })
+    const { payload } = jws.decode(token, { json: true }) || {} as jws.Signature
     if (!payload) {
         return reply.send({active: false})
     }
@@ -534,61 +547,46 @@ if (loginSyncUrl) {
 }
 
 const logoutUser = async (nonce: string) => {
-    const result = await state.update(nonce, {
-        loggedIn: false,
-    })
+    const result = await state.remove(nonce)
+}
+
+const logoutSync = async (params: LogoutSyncParams): Promise<LogoutSyncResponse> => {
+
+    try {
+        const clearedCookies = createTokenCookies('', '')
+
+        debugger
+        
+            console.log('logoutSync called x', clearedCookies)
+        
+            console.log('logoutSync get', params.cbRes)
+            // console.log('logoutSync get', params.cbRes.getHeaders())
+        // 
+            params.cbRes.setHeader('Set-Cookie', clearedCookies)
+        
+            console.log('logoutSync postheaders', params.cbRes.getHeaders())
+        
+    } catch (e) {
+        console.error('logoutSync error', e)
+    }
+
+
+    return null
 }
 
 const loginSync = async ( params: LoginSyncParams ): Promise<LoginSyncResponse> => {
-    const { payload, token } = params
-    const { nonce, sub } = payload
+    const { payload, token, target_uri } = params
+    const { nonce, sub, aud } = payload
 
-    if (!PRODUCTION) {
-        console.log('loginSync', {payload, token})
-    }
-
-    if (loginSyncUrl) { // see if user is allowed to login
-        const response = await fetch(loginSyncUrl, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ payload, token })
-        })
-        if (!response.ok) {
-                console.log(`loginSyncUrl ${loginSyncUrl} returned ${response.status} - access denied for sub ${sub}`)
-                await logoutUser(nonce)
-                return { accessDenied: true }
-        }
-        // we have a 2xx response
-        if (response.status === 200) { // we have content
-            try {
-                const json = await response.json()
-                if (json?.accessDenied) {
-                    console.log('loginSync - access denied for sub', sub)
-                    await logoutUser(nonce)
-                    return { accessDenied: true}
-                }
-            } catch (e) {
-                console.error('loginSync - JSON parsing error', e)
-            }
-        }
-
-        // fall through to update state as access is granted
-    }
+// TBD - move reading in state further up so that we can include state in call to loginSyncUrl
 
     const now = Math.floor(Date.now() / 1000)
+
     const currentState = await state.read(nonce)
     if (!currentState) {
         console.error({error:'invalid_request', error_description:'nonce is invalid'})
         return {}
     }
-
-    if (!PRODUCTION) {
-        console.log('loginSync', {currentState})
-    }
-
-
     if (currentState.loggedIn) {
         console.error({error:'invalid_request', error_description:'nonce is already logged in'})
         return {}
@@ -599,16 +597,82 @@ const loginSync = async ( params: LoginSyncParams ): Promise<LoginSyncResponse> 
     }
 
     // we have a valid state to change to sync login across channels
-    await state.update(nonce, {
+    // this is what we hope have in the access_token
+    const statePayload: state.State = {
+        loggedIn: true,
         iss: ISSUER,
         exp: now + STATE_LIFETIME,
         nonce,
-        loggedIn: true,
-        sub
-    })
+        sub,
+        aud,
+    }
 
+    if (currentState?.origin?.client_id) {
+        statePayload.client_id = currentState.origin.client_id
+    }
 
-    return {}
+    // POTENTIAL FUTURE - reduce size of hello_auth cookie
+    // this is what is returned from op=auth
+    // cookie will contain updatedAuth + defaults of `isLoggedIn`, `sub`, and `iat`
+    // const hello_auth: { updatedAuth: { app_sub?: string } } = { updatedAuth: {} }
+ 
+    const syncResponse: LoginSyncResponse = {}
+    if (loginSyncUrl) { // see if user is allowed to login
+        const response = await fetch(loginSyncUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ 
+                payload, 
+                token, 
+                origin: {
+                    client_id: currentState?.origin?.client_id,
+                    target_uri
+                }
+            })
+        })
+        if (!response.ok) {
+                console.log(`loginSyncUrl ${loginSyncUrl} returned ${response.status} - access denied for sub ${sub}`)
+                await logoutUser(nonce)
+                return { accessDenied: true }
+        }
+        // we have a 2xx response
+        if ((response.status === 200) && (response.headers.get('content-type')?.includes('application/json'))) {
+            try {
+                const json = await response.json()
+                const { accessDenied, payload, target_uri: new_target_uri }  = json                
+                if (accessDenied) {
+                    console.log('loginSync - access denied for sub', sub)
+                    await logoutUser(nonce)
+                    return { accessDenied: true}
+                }
+                if (payload) { 
+                    if (payload.sub) {
+                        statePayload.sub = payload.sub
+                        statePayload.hello_sub = sub
+                        // hello_auth.updatedAuth.app_sub = payload.sub // so op=auth has access to the app sub
+                    }
+                    if (payload.scope)
+                        statePayload.scope = payload.scope
+                    if (payload.client_id)
+                        statePayload.client_id = payload.client_id
+                }
+                if (new_target_uri) {
+                    // redirect to new_target_uri
+                    syncResponse.target_uri = new_target_uri
+                }
+            } catch (e) {
+                console.error('loginSync - JSON parsing error', e)
+            }
+        }
+
+        // fall through to update state as access is granted
+    }
+
+    await state.update(nonce, statePayload)
+
+    return syncResponse // we could minimize hello_auth cookie here by returning an object with updatedAuth
 }
 
 
@@ -618,6 +682,7 @@ const helloConfig: HelloConfig = {
     logConfig: true,
     apiRoute: AUTH_ROUTE,
     loginSync,
+    logoutSync,
 }
 
 // console.log('api.js', {helloConfig})
@@ -642,9 +707,15 @@ const api = (app: FastifyInstance) => {
     app.get(JWKS_ENDPOINT, (req, reply) => {
         return reply.send(PUBLIC_JWKS)
     })
-    app.get(AUTH_ROUTE+"/version", (request, reply) => {
+    app.get(AUTH_ROUTE+"/version", (req, reply) => {
         return reply.send({version});
     });
+    if (!PRODUCTION) {
+        // used to test if cookies are getting cleared
+        app.get(TOKEN_ENDPOINT+"/cookies", (req, reply) => {
+            return reply.send({cookies: getCookies(req)});
+        });
+    }
 }
 
 export { api, PORT, loginSync } // loginSync is exported for testing
