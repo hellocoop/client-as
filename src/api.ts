@@ -178,6 +178,11 @@ const getCookies = (req: FastifyRequest): Record<string, string> => {
     return parseCookies(cookies)
 }
 
+const setClearCookies = (reply: FastifyReply) => {
+    const clearedCookies = createTokenCookies('', '')
+    reply.header('Set-Cookie', clearedCookies)
+}
+
 const validateDPoP = (req: FastifyRequest): string => {
     if (!USE_DPOP)
         return ''
@@ -505,7 +510,7 @@ const logoutEndpoint = async (req: FastifyRequest, reply: FastifyReply) => {
     const { nonce } = req.body as { nonce?: string }
 
     await logoutUser(nonce || '')
-    setTokenCookies(reply, '', '')
+    setClearCookies(reply)
 
     return reply.send({loggedOut: true})
 }
