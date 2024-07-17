@@ -1,0 +1,24 @@
+name: build-images
+run-name: Build client-as image and push to ECR
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    name: Build main image and push to ECR
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v2
+      - uses: ./.github/actions/build-publish-image
+        with:
+          repository: client-as
+          repo_token: ${{ secrets.TP_BUILDER_REPO_TOKEN }}
+          dockerfile: Dockerfile
+
