@@ -1,5 +1,4 @@
-# client_as
-
+# AS4Mobile
 Authorization Server for Mobile Apps
 
 ## Environment Configuration
@@ -57,7 +56,6 @@ User is logged in. access_token and refresh_token cookies have been created and 
 
 After the user has successfully logged in, call 
 
-```
 POST /token HTTP/1.1
 Host: app.tiltingpoint.com
 Content-Type: application/x-www-form-urlencoded
@@ -66,20 +64,14 @@ DPoP: zzzzz
 grant_type=authorization_code&
 client_id=SDK-1.0.0
 code=<nonce>
-```
 
-will return
-```
 {
     "access_token": "xxx",
     "token_type": "DPoP",
     "refresh_token": "yyy",
     "expires_in": 300
 }
-```
-Refreshing an access token
 
-```
 POST /token HTTP/1.1
 Host: app.tiltingpoint.com
 Content-Type: application/x-www-form-urlencoded
@@ -88,33 +80,24 @@ DPoP: zzzzz
 Refresh
 grant_type=refresh_token&
 refresh_token=yyy
-```
 
-## Endpoints
 
-### /token // public
+Endpoints
+
+/token // public
 
 grant_type="cookie_token"
 device_info ???
 
-### /jwks
+/jwks
 
-### /revoke
+/revoke
 
-### /.wellknown/oauth-authorization-server
+/.wellknown/oauth-authorization-server
 
-### /login
+/login
     - called by client after successful login
 
 
 
 
-## Development
-
-- clone repo
-- `npm i` to install all node modules
-- `npx playwright install` to install Playwright binaries to test with
-
-`npm test` will run fastify.inject() tests
-
-`npm run playwright` will start all the services with docker compose and then run the Playwright tests for browser interactions

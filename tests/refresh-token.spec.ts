@@ -180,7 +180,7 @@ describe('Refresh Token', () => {
         } else {
             assert.strictEqual(json.token_type, 'Bearer', 'token_type is not Bearer');
         }
-        const { header: accessHeader, payload: accessPayload } = jws.decode(access_token, { json: true }) as jws.Signature
+        const { header: accessHeader, payload: accessPayload } = jws.decode(access_token, { json: true });
         assert(accessHeader, 'access_token cookie value is not a valid JWT');
         assert.strictEqual(accessHeader.alg, 'RS256', 'access_token alg is not RS256');
         assert.strictEqual(accessHeader.typ, 'at+jwt', 'access_token typ is not at+jwt');
@@ -195,7 +195,7 @@ describe('Refresh Token', () => {
         assert.strictEqual(accessPayload.client_id, SDK_CLIENT_ID, `access_token aud is not ${SDK_CLIENT_ID}`);
         assert.strictEqual(accessPayload.exp - accessPayload.iat, ACCESS_LIFETIME, `access_token exp - iat is not ${ACCESS_LIFETIME}`);
         assert.strictEqual(accessPayload.token_type, 'access_token', 'access_token token_type is not access_token');
-        const { header: refreshHeader, payload: refreshPayload } = jws.decode(refresh_token, { json: true }) as jws.Signature
+        const { header: refreshHeader, payload: refreshPayload } = jws.decode(refresh_token, { json: true });
         assert(refreshHeader, 'refresh_token cookie value is not a valid JWT');
         assert.strictEqual(refreshHeader.alg, 'RS256', 'refresh_token alg is not RS256');
         assert.strictEqual(refreshHeader.kid, kid, 'refresh_token kid is not the same as the jwks kid');
@@ -231,7 +231,7 @@ describe('Refresh Token', () => {
         assert(newAccessToken, 'access_token does not exist');
         assert(newRefreshToken, 'refresh_token does not exist');
         assert.strictEqual(json.expires_in, ACCESS_LIFETIME, `expires_in is not ${ACCESS_LIFETIME}`);
-        const { header: accessHeader, payload: accessPayload } = jws.decode(newAccessToken, { json: true }) as jws.Signature
+        const { header: accessHeader, payload: accessPayload } = jws.decode(newAccessToken, { json: true });
         assert(accessHeader, 'access_token cookie value is not a valid JWT');
         assert.strictEqual(accessHeader.alg, 'RS256', 'access_token alg is not RS256');
         assert.strictEqual(accessHeader.typ, 'at+jwt', 'access_token typ is not at+jwt');
@@ -246,7 +246,7 @@ describe('Refresh Token', () => {
         assert.strictEqual(accessPayload.client_id, SDK_CLIENT_ID, `access_token aud is not ${SDK_CLIENT_ID}`);
         assert.strictEqual(accessPayload.exp - accessPayload.iat, ACCESS_LIFETIME, `access_token exp - iat is not ${ACCESS_LIFETIME}`);
         assert.strictEqual(accessPayload.token_type, 'access_token', 'access_token token_type is not access_token');
-        const { header: refreshHeader, payload: refreshPayload } = jws.decode(newRefreshToken, { json: true }) as jws.Signature
+        const { header: refreshHeader, payload: refreshPayload } = jws.decode(newRefreshToken, { json: true });
         assert(refreshHeader, 'refresh_token cookie value is not a valid JWT');
         assert.strictEqual(refreshHeader.alg, 'RS256', 'refresh_token alg is not RS256');
         assert.strictEqual(refreshHeader.kid, kid, 'refresh_token kid is not the same as the jwks kid');

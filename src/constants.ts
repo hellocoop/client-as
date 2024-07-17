@@ -7,7 +7,6 @@ export const LOGOUT_ENDPOINT = AUTH_ROUTE + '/logout'
 export const REVOCATION_ENDPOINT = AUTH_ROUTE + '/revoke'
 export const JWKS_ENDPOINT = AUTH_ROUTE + '/jwks'
 export const INTROSPECTION_ENDPOINT = AUTH_ROUTE + '/introspect'
-export const COOKIES_ENDPOINT = TOKEN_ENDPOINT + '/cookies'
 
 export const ACCESS_LIFETIME = 5 * 60              // 5 minutes
 export const STATE_LIFETIME = 5 * 60               // 5 minutes
