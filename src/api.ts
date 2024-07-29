@@ -10,6 +10,7 @@ import { helloAuth, HelloConfig, LoginSyncParams, LoginSyncResponse, LogoutSyncP
 
 import { PUBLIC_JWKS, PRIVATE_KEY, PUBLIC_KEY } from './jwks'
 import * as state from './state'
+import * as Logger from './logger'
 
 import {
     API_ROOT,
@@ -63,6 +64,12 @@ const { version } = require('../package.json')
 const clientId = process.env.CLIENT_ID || process.env.HELLO_CLIENT_ID
 const cookieSecret = process.env.COOKIE_SECRET || process.env.HELLO_COOKIE_SECRET
 
+// create structure log instead of raw error log
+process.on('uncaughtException', (error: Error) => {
+    Logger.error(error.message || 'Uncaught Exception', Logger.formatError(error));
+    process.exit(1);
+});
+
 if (!clientId) {
     throw new Error('CLIENT_ID or HELLO_CLIENT_ID is required')
 }
@@ -109,7 +116,7 @@ if (USE_DPOP) {
 }
 
 
-console.log('/.well-known/oauth-authorization-server', JSON.stringify(META_DATA, null, 2))
+Logger.info('/.well-known/oauth-authorization-server', { metaData: JSON.stringify(META_DATA, null, 2) })
 
 class TokenError extends Error {
     statusCode: number;
@@ -500,7 +507,7 @@ const tokenEndpoint = async (req: FastifyRequest, reply: FastifyReply) => {
         reply.code(400).send({error:'unsupported_grant_type'})
     } catch (e) {
         const error = e as TokenError
-        console.error('token endpoint fault',error)
+        Logger.error('token endpoint fault', Logger.formatError(error))
         setSessionCookie(reply, '')
         return reply.code(error.statusCode || 500).send({error: 'token parsing'})
     }
@@ -548,7 +555,7 @@ if (loginSyncUrl) {
     if (!(loginSyncUrl.startsWith('http://') || loginSyncUrl.startsWith('https://'))) {
         throw new Error('LOGIN_SYNC_URL must be a valid URL and start with https:// or http://')
     }
-    console.log('loginSyncUrl', loginSyncUrl)
+    Logger.info('loginSyncUrl set', { url: loginSyncUrl })
 }
 
 const logoutUser = async (nonce: string) => {
@@ -572,7 +579,7 @@ const logoutSync = async (params: LogoutSyncParams): Promise<LogoutSyncResponse>
             console.log('logoutSync postheaders', params.cbRes.getHeaders())
         
     } catch (e) {
-        console.error('logoutSync error', e)
+        Logger.error('logoutSync error', Logger.formatError(e))
     }
 
 
@@ -589,15 +596,15 @@ const loginSync = async ( params: LoginSyncParams ): Promise<LoginSyncResponse> 
 
     const currentState = await state.read(nonce)
     if (!currentState) {
-        console.error({error:'invalid_request', error_description:'nonce is invalid'})
+        Logger.error("loginSync nonce is invalid")
         return {}
     }
     if (currentState.loggedIn) {
-        console.error({error:'invalid_request', error_description:'nonce is already logged in'})
+        Logger.error("loginSync nonce is already logged in")
         return {}
     }
     if ((currentState.exp ?? 0) < now) {
-        console.error({error:'invalid_request', error_description:'state has expired'})
+        Logger.error("loginSync state has expired")
         return {}
     }
 
@@ -638,7 +645,7 @@ const loginSync = async ( params: LoginSyncParams ): Promise<LoginSyncResponse> 
             })
         })
         if (!response.ok) {
-                console.log(`loginSyncUrl ${loginSyncUrl} returned ${response.status} - access denied for sub ${sub}`)
+                Logger.info('loginSync failed, access denied', { status: response.status, sub, url: loginSyncUrl })
                 await logoutUser(nonce)
                 return { accessDenied: true }
         }
@@ -648,7 +655,7 @@ const loginSync = async ( params: LoginSyncParams ): Promise<LoginSyncResponse> 
                 const json = await response.json()
                 const { accessDenied, payload, target_uri: new_target_uri }  = json                
                 if (accessDenied) {
-                    console.log('loginSync - access denied for sub', sub)
+                    Logger.info("loginSync access denied for sub", { sub })
                     await logoutUser(nonce)
                     return { accessDenied: true}
                 }
@@ -668,7 +675,7 @@ const loginSync = async ( params: LoginSyncParams ): Promise<LoginSyncResponse> 
                     syncResponse.target_uri = new_target_uri
                 }
             } catch (e) {
-                console.error('loginSync - JSON parsing error', e)
+                Logger.error('loginSync response error', Logger.formatError(e));
             }
         }
 

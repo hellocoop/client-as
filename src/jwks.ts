@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import jwkToPem, { JWK } from 'jwk-to-pem';
 import { promisify } from 'util';
+import * as logger from './logger';
 
 const readFile = promisify(fs.readFile);
 
@@ -68,11 +69,7 @@ const loadKeys = (): void => {
 try {
     loadKeys();
 } catch (error) {
-    if (error instanceof Error) {
-        console.error('Error:', error.message);
-    } else {
-        console.error('Error:', 'An error occurred');
-    }
+    logger.error("failed to load JWKS keys", logger.formatError(error));
 }
 
 export { PRIVATE_KEY, PUBLIC_KEY, PUBLIC_JWKS };

@@ -2,6 +2,7 @@
 
 import { api, PORT } from './api'
 import Fastify, { FastifyInstance } from 'fastify'
+import * as logger from './logger';
 
 const app: FastifyInstance = Fastify()
 
@@ -12,5 +13,5 @@ app.listen({ host: '0.0.0.0', port: PORT }, function (err, address) {
       console.error(err);
       process.exit(1);
     }
-    console.log(`server listening on ${address}`);
+    logger.info(`server listening on ${address}`);
 })
